@@ -10,11 +10,23 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 const STATE_FILE: &str = "state.json";
+
+/// Serializes state-file writes. Save/backup commands run on Tauri's thread pool, so two
+/// debounced saves (or a save racing a backup) would otherwise fight over the shared
+/// `state.json.tmp` path and break the atomic-write invariant.
+static FILE_LOCK: Mutex<()> = Mutex::new(());
+
+fn file_lock() -> std::sync::MutexGuard<'static, ()> {
+    // A poisoned lock only means another writer panicked; the file itself is still
+    // consistent (rename is atomic), so writing may continue.
+    FILE_LOCK.lock().unwrap_or_else(|p| p.into_inner())
+}
 
 fn state_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
@@ -63,6 +75,7 @@ fn load_from(path: &Path) -> Result<Option<Value>, String> {
 const MAX_STATE_BYTES: usize = 5 * 1024 * 1024;
 
 fn save_to(path: &Path, state: &Value) -> Result<(), String> {
+    let _guard = file_lock();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create config dir failed: {e}"))?;
     }
@@ -100,6 +113,7 @@ fn save_to(path: &Path, state: &Value) -> Result<(), String> {
 /// Boundary validation lives here: the label comes from the WebView, so it is reduced
 /// to alphanumerics, `-` and `_` before touching a filename.
 fn backup_at(path: &Path, label: &str) -> Result<(), String> {
+    let _guard = file_lock();
     if !path.exists() {
         return Ok(());
     }
@@ -172,6 +186,30 @@ mod tests {
         save_to(&path, &json!({"v": 2})).expect("second");
         assert_eq!(load_from(&path).unwrap().unwrap()["v"], 2);
         assert!(!path.with_extension("json.tmp").exists(), "tmp must be renamed away");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_saves_do_not_corrupt() {
+        let dir = test_dir("concurrent");
+        let path = dir.join(STATE_FILE);
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let p = path.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..10 {
+                        save_to(&p, &json!({ "v": i })).expect("save");
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().expect("join");
+        }
+        // Whatever write won last, the file parses and no tmp is left behind.
+        let v = load_from(&path).expect("load").expect("some");
+        assert!(v["v"].is_number());
+        assert!(!path.with_extension("json.tmp").exists());
         let _ = fs::remove_dir_all(&dir);
     }
 

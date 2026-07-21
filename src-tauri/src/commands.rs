@@ -14,7 +14,11 @@ struct ExitPayload {
     code: u32,
 }
 
-#[tauri::command]
+// Commands that block (ConPTY setup, taskkill, file I/O) are marked `async` so Tauri
+// runs them on the thread pool instead of the main thread; a stalled child or slow disk
+// must never freeze the UI. pty_write/pty_resize stay sync: they are a channel send and
+// an ioctl.
+#[tauri::command(async)]
 pub fn pty_spawn(
     app: AppHandle,
     manager: State<'_, PtyManager>,
@@ -47,31 +51,31 @@ pub fn pty_resize(
     manager.resize(&id, cols, rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_kill(manager: State<'_, PtyManager>, id: String) -> Result<(), String> {
     manager.kill(&id)
 }
 
 /// Resolve a program on PATH. Returns its full path if installed, else None.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn which_program(program: String) -> Option<String> {
     which::which(&program)
         .ok()
         .map(|p| p.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn session_state_load(app: AppHandle) -> Result<Option<Value>, String> {
     session::load(&app)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn session_state_save(app: AppHandle, state: Value) -> Result<(), String> {
     session::save(&app, &state)
 }
 
 /// Back up the current state file (e.g. before discarding an old-version blob).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn session_state_backup(app: AppHandle, label: String) -> Result<(), String> {
     session::backup(&app, &label)
 }
