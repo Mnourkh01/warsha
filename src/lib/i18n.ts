@@ -162,6 +162,11 @@ const en = {
   cmdNewClaudeChat: "New Claude chat",
   cmdNewGeminiChat: "New Gemini chat",
 
+  // update toast
+  updateAvailable: (version: string) => `Warsha ${version} is available`,
+  updateDownload: "Download",
+  updateLater: "Later",
+
   // shortcuts dialog
   keyboardShortcuts: "Keyboard shortcuts",
   closeShortcuts: "Close shortcuts",
@@ -321,6 +326,10 @@ const ar: Strings = {
   chatFailed: (detail) => `فشل الطلب: ${detail}`,
   cmdNewClaudeChat: "دردشة Claude جديدة",
   cmdNewGeminiChat: "دردشة Gemini جديدة",
+
+  updateAvailable: (version) => `يتوفر إصدار جديد Warsha ${version}`,
+  updateDownload: "تحميل",
+  updateLater: "لاحقا",
 
   keyboardShortcuts: "اختصارات لوحة المفاتيح",
   closeShortcuts: "إغلاق الاختصارات",

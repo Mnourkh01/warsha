@@ -979,3 +979,39 @@
 .chat-send:disabled {
   opacity: 0.4;
 }
+
+/* ---- update toast (bottom corner, dismissible, one per launch) --------------- */
+
+.update-toast {
+  position: absolute;
+  inset-block-end: 14px;
+  inset-inline-end: 14px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
+  font-size: 13px;
+  color: var(--text);
+}
+.update-toast .update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-toast .update-btn:hover {
+  background: var(--accent-hover);
+}

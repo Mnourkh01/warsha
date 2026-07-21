@@ -4,6 +4,7 @@ mod agent;
 mod commands;
 mod pty;
 mod session;
+mod update;
 
 use agent::AgentManager;
 use pty::PtyManager;
@@ -37,6 +38,7 @@ pub fn run() {
             commands::session_state_backup,
             commands::agent_send,
             commands::agent_cancel,
+            commands::update_check,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

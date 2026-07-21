@@ -1,6 +1,6 @@
 [package]
 name = "warsha"
-version = "0.1.0"
+version = "0.1.1"
 description = "Warsha - a lightweight terminal workspace"
 authors = ["mnour"]
 edition = "2021"

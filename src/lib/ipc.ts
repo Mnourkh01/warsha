@@ -85,6 +85,16 @@ export async function agentCancel(id: string): Promise<void> {
   await invoke("agent_cancel", { id });
 }
 
+export interface UpdateInfo {
+  version: string;
+  url: string;
+}
+
+/** Newer GitHub release if one exists; null when up to date or unable to check. */
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  return (await invoke<UpdateInfo | null>("update_check")) ?? null;
+}
+
 /** Full path of a program if it is on PATH, else null. */
 export async function whichProgram(program: string): Promise<string | null> {
   return (await invoke<string | null>("which_program", { program })) ?? null;

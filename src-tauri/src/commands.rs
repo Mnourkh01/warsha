@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::agent::{self, AgentManager, AgentSendOpts};
 use crate::pty::{PtyManager, SpawnOpts};
 use crate::session;
+use crate::update;
 
 #[derive(Debug, Clone, Serialize)]
 struct ExitPayload {
@@ -96,4 +97,11 @@ pub fn agent_send(
 #[tauri::command(async)]
 pub fn agent_cancel(manager: State<'_, AgentManager>, id: String) -> Result<(), String> {
     agent::cancel(&manager, &id)
+}
+
+/// Check GitHub for a newer release (via the user's gh CLI). None = up to date or
+/// cannot check; the frontend stays silent either way.
+#[tauri::command(async)]
+pub fn update_check() -> Option<update::UpdateInfo> {
+    update::check()
 }

@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { PanelLeftOpen } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowDownToLine, PanelLeftOpen, X } from "lucide-react";
 import { SessionTree } from "./features/tree/SessionTree";
 import { Workspace } from "./features/workspace/Workspace";
 import { CommandPalette } from "./features/command-palette/CommandPalette";
@@ -14,7 +14,7 @@ import { applyTheme, resolveTheme } from "./lib/theme";
 import { applySettingsToAll, getTerminal } from "./features/terminal/controller";
 import { noteExit } from "./features/terminal/attention";
 import { useStrings } from "./lib/i18n";
-import { onPtyExit } from "./lib/ipc";
+import { checkForUpdate, onPtyExit, openExternal, type UpdateInfo } from "./lib/ipc";
 
 // Browser accelerators WebView2 would otherwise hijack from app chrome:
 // print, find, view-source, save, downloads, find-next.
@@ -29,6 +29,7 @@ export default function App() {
   const locale = useSettings((s) => s.locale);
   const sidebarOpen = useUI((s) => s.sidebarOpen);
   const t = useStrings();
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
 
   // Keep <html data-theme> synced with the app theme, and terminals synced with the
   // (independent) terminal color scheme.
@@ -82,6 +83,19 @@ export default function App() {
       cancelled = true;
       unlisten?.();
     };
+  }, []);
+
+  // One update check per launch, delayed so it never competes with session restore.
+  // Silent on every failure path (no gh, offline, private-repo auth) by design.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkForUpdate()
+        .then((info) => {
+          if (info) setUpdate(info);
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Coming back to the window means the user is looking at the active pane again.
@@ -180,6 +194,29 @@ export default function App() {
       <SettingsDialog />
       <NewSessionDialog />
       <ShortcutsDialog />
+      {update && (
+        <div className="update-toast" role="status">
+          <span className="update-text">{t.updateAvailable(update.version)}</span>
+          <button
+            className="update-btn"
+            onClick={() => {
+              void openExternal(update.url);
+              setUpdate(null);
+            }}
+          >
+            <ArrowDownToLine size={14} />
+            {t.updateDownload}
+          </button>
+          <button
+            className="icon-btn sm"
+            title={t.updateLater}
+            aria-label={t.updateLater}
+            onClick={() => setUpdate(null)}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
