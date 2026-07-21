@@ -1,0 +1,27 @@
+[package]
+name = "warsha"
+version = "0.1.0"
+description = "Warsha - a lightweight terminal workspace"
+authors = ["mnour"]
+edition = "2021"
+
+[lib]
+# The `_lib` suffix keeps the lib name unique from the bin name (Windows cargo #8519).
+name = "warsha_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+portable-pty = "0.9"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tauri-plugin-window-state = "2.4.1"
+parking_lot = "0.12.5"
+tauri-plugin-dialog = "2.7.2"
+which = "7"

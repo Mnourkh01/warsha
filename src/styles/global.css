@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+/*
+  Warsha design tokens - "Calm graphite workshop".
+  Warm ink neutrals + one muted clay accent. Dark-first, real light theme.
+  Theme is switched by `data-theme="light" | "dark"` on <html>; dark is the default.
+  One spacing scale (Tailwind default 4px base). No ad-hoc padding, no gradient decoration.
+*/
+
+@theme {
+  --font-sans: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
+
+  /* radius scale */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+}
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces - deep violet-charcoal (IDE family: still near-black, tinted purple) */
+  --bg-app: #15131f;        /* app background */
+  --bg-sunken: #100e18;     /* terminal wells, deepest */
+  --bg-panel: #1a1826;      /* sidebar, panels */
+  --bg-elev: #232032;       /* raised: menus, inputs, hover */
+  --bg-elev-2: #2d2942;     /* active/pressed */
+
+  /* Text - cool off-white with a lavender cast */
+  --text: #e7e4f0;
+  --text-dim: #a29db8;
+  --text-faint: #6f6a85;
+
+  /* Lines */
+  --border: #2a2740;
+  --border-strong: #3b3757;
+
+  /* Accent - indigo/violet (chrome state only, never on the terminal grid) */
+  --accent: #8b7cf6;
+  --accent-hover: #9d8ffa;
+  --accent-soft: #8b7cf626; /* ~15% violet wash for selected rows */
+  --on-accent: #17131f;     /* near-black text on the violet button */
+
+  /* Status */
+  --ok: #62c08a;
+  --warn: #e0a34a;
+  --danger: #f06a7a;
+
+  /* Focus ring */
+  --ring: #8b7cf6;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-app: #eeecf3;
+  --bg-sunken: #e6e3ee;
+  --bg-panel: #f4f2f8;
+  --bg-elev: #faf9fc;
+  --bg-elev-2: #ffffff;
+
+  --text: #1e1b2b;
+  --text-dim: #575269;
+  --text-faint: #8b8699;
+
+  --border: #d9d5e4;
+  --border-strong: #c3bdd4;
+
+  --accent: #6d4fd6;
+  --accent-hover: #5a3ec4;
+  --accent-soft: #6d4fd61f;
+  --on-accent: #ffffff;
+
+  --ok: #3f9a67;
+  --warn: #9a6f1c;
+  --danger: #c9445f;
+
+  --ring: #6d4fd6;
+}
+
+/* Optional terminal text overrides (user-tunable in Settings; empty = use theme). */
+:root {
+  --term-fg-override: ;
+  --term-weight: 400;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-app);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden; /* app owns its own scroll regions */
+}
+
+/* User-named content (session/group names) auto-directs so Arabic goes RTL,
+   English stays LTR, and mixed strings are not reversed. */
+.bidi-auto {
+  unicode-bidi: plaintext;
+}
+
+/* Thin, quiet scrollbars that match the graphite chrome */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+/* Focus visibility - keyboard only */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
