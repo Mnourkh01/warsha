@@ -57,13 +57,14 @@ export function openSession(id: string): void {
 /** Stop a session: remove it from its workspace and kill the PTY. */
 export function closeSession(id: string): void {
   useWorkspaces.getState().removeSession(id);
-  disposeTerminal(id);
+  void disposeTerminal(id);
   useRuntime.getState().clearStatus(id);
 }
 
-/** Restart a session in place (dispose + remount its TerminalView via an epoch bump). */
-export function restartSession(id: string): void {
-  disposeTerminal(id);
+/** Restart a session in place (dispose + remount its TerminalView via an epoch bump).
+ *  Awaits the kill so the respawn under the SAME id cannot race the old PTY teardown. */
+export async function restartSession(id: string): Promise<void> {
+  await disposeTerminal(id);
   useRuntime.getState().setStatus(id, "running");
   useRuntime.getState().bumpEpoch(id);
 }
@@ -80,7 +81,7 @@ export function deleteWorkspace(id: string): void {
   const removed = useWorkspaces.getState().removeWorkspace(id);
   const runtime = useRuntime.getState();
   for (const sid of removed) {
-    disposeTerminal(sid);
+    void disposeTerminal(sid);
     runtime.clearStatus(sid);
   }
 }

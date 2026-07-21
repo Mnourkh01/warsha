@@ -41,6 +41,39 @@ const DEFAULTS: SettingsPersist = {
   termBold: false,
 };
 
+const THEMES: readonly ThemeMode[] = ["dark", "light", "system"];
+const TERM_THEMES: readonly TerminalTheme[] = ["dark", "light", "match"];
+const SHELL_KINDS = ["powershell", "cmd", "wsl", "custom"] as const;
+
+/** Boundary validation for the persisted blob: it is untrusted (hand-edited, corrupt,
+ *  or from an older build). Every bad field falls back to its default instead of
+ *  reaching xterm (a fontSize of 0/NaN/500 breaks the grid). */
+function sanitize(data: Partial<SettingsPersist> | undefined): SettingsPersist {
+  const d = data ?? {};
+  const fontSize =
+    typeof d.fontSize === "number" && Number.isFinite(d.fontSize)
+      ? Math.max(9, Math.min(28, Math.round(d.fontSize)))
+      : DEFAULTS.fontSize;
+  const theme = THEMES.includes(d.theme as ThemeMode) ? (d.theme as ThemeMode) : DEFAULTS.theme;
+  const terminalTheme = TERM_THEMES.includes(d.terminalTheme as TerminalTheme)
+    ? (d.terminalTheme as TerminalTheme)
+    : DEFAULTS.terminalTheme;
+  const shell = d.defaultShell as ShellKind | undefined;
+  const defaultShell =
+    shell &&
+    typeof shell === "object" &&
+    SHELL_KINDS.includes(shell.kind) &&
+    (shell.kind !== "custom" || typeof shell.program === "string")
+      ? shell
+      : DEFAULTS.defaultShell;
+  const defaultCwd =
+    typeof d.defaultCwd === "string" && d.defaultCwd.trim() ? d.defaultCwd : undefined;
+  const termForeground =
+    typeof d.termForeground === "string" && d.termForeground.trim() ? d.termForeground : undefined;
+  const termBold = typeof d.termBold === "boolean" ? d.termBold : DEFAULTS.termBold;
+  return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold };
+}
+
 export const useSettings = create<SettingsState>((set, get) => ({
   ...DEFAULTS,
   setTheme: (theme) => set({ theme }),
@@ -51,7 +84,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setTermForeground: (termForeground) =>
     set({ termForeground: termForeground && termForeground.trim() ? termForeground : undefined }),
   setTermBold: (termBold) => set({ termBold }),
-  hydrate: (data) => set({ ...DEFAULTS, ...data }),
+  hydrate: (data) => set(sanitize(data)),
   serialize: () => {
     const { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold } =
       get();

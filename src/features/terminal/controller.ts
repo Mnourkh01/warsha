@@ -11,8 +11,9 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
 
-import { ptySpawn, ptyWrite, ptyResize, ptyKill } from "../../lib/ipc";
+import { ptySpawn, ptyWrite, ptyResize, ptyKill, openExternal } from "../../lib/ipc";
 import type { ShellKind } from "../../lib/types";
+import { useRuntime } from "../../store/runtime";
 import { terminalBg, terminalThemeFor } from "./theme";
 
 export interface TerminalOpts {
@@ -43,6 +44,8 @@ class TerminalController {
   private opts: TerminalOpts;
   private opened = false;
   private spawned = false;
+  private spawnFailed = false;
+  private disposed = false;
   private ro?: ResizeObserver;
   private onExitCb?: () => void;
 
@@ -69,13 +72,21 @@ class TerminalController {
     this.searchAddon = new SearchAddon();
     this.term.loadAddon(this.fitAddon);
     this.term.loadAddon(this.searchAddon);
-    this.term.loadAddon(new WebLinksAddon());
+    // Terminal output is untrusted (any remote program can print a link), so clicks
+    // must open the SYSTEM browser via the opener plugin, never a WebView window.
+    this.term.loadAddon(
+      new WebLinksAddon((_event, uri) => {
+        void openExternal(uri);
+      }),
+    );
     const unicode = new Unicode11Addon();
     this.term.loadAddon(unicode);
     this.term.unicode.activeVersion = "11";
 
     this.term.onData((data) => {
-      void ptyWrite(this.sessionId, data);
+      // Rejections are expected on a dead session (exited/killed); the exit notice is
+      // already printed, so don't spam unhandled-rejection noise per keystroke.
+      void ptyWrite(this.sessionId, data).catch(() => {});
     });
 
     // Ctrl+C is SIGINT in a shell, so copy/paste use Ctrl+Shift+C / Ctrl+Shift+V.
@@ -88,7 +99,9 @@ class TerminalController {
       }
       if (e.ctrlKey && e.shiftKey && e.code === "KeyV") {
         void navigator.clipboard.readText().then((t) => {
-          if (t) void ptyWrite(this.sessionId, t);
+          // paste() honors bracketed-paste (mode 2004) when the app enabled it, so a
+          // multi-line snippet does not execute line-by-line in vim/REPLs.
+          if (t) this.term.paste(t);
         });
         return false;
       }
@@ -101,11 +114,13 @@ class TerminalController {
     parent.appendChild(this.el);
     if (!this.opened) {
       this.term.open(this.el);
-      this.tryWebgl();
       this.opened = true;
       this.ro = new ResizeObserver(() => this.fitAndMaybeSpawn());
       this.ro.observe(this.el);
     }
+    // (Re)acquire a WebGL context while visible; detach() released it, so the browser's
+    // ~16-context budget always goes to panes the user can actually see.
+    this.tryWebgl();
     this.paintBg();
     this.fitAndMaybeSpawn();
   }
@@ -121,8 +136,10 @@ class TerminalController {
     if (screen) screen.style.backgroundColor = color;
   }
 
-  /** Detach the element (keeps the instance + PTY alive). */
+  /** Detach the element (keeps the instance + PTY alive). Hidden panes give up their
+   *  WebGL context (xterm falls back to the DOM renderer) - see attach(). */
   detach(): void {
+    this.releaseWebgl();
     if (this.el.parentElement) this.el.parentElement.removeChild(this.el);
   }
 
@@ -154,8 +171,16 @@ class TerminalController {
     this.searchAddon.findNext(term);
   }
 
+  private releaseWebgl(): void {
+    if (this.webgl) {
+      this.webgl.dispose();
+      this.webgl = undefined;
+      webglCount = Math.max(0, webglCount - 1);
+    }
+  }
+
   private tryWebgl(): void {
-    if (webglCount >= MAX_WEBGL) return;
+    if (this.webgl || !this.opened || webglCount >= MAX_WEBGL) return;
     try {
       const addon = new WebglAddon();
       addon.onContextLoss(() => {
@@ -184,8 +209,9 @@ class TerminalController {
     if (this.term.cols > 0 && this.term.rows > 0) {
       if (!this.spawned) {
         this.spawn(this.term.cols, this.term.rows);
-      } else {
-        void ptyResize(this.sessionId, this.term.cols, this.term.rows);
+      } else if (!this.spawnFailed && !this.disposed) {
+        // A failed/disposed session must not spam resize IPC at a dead id.
+        void ptyResize(this.sessionId, this.term.cols, this.term.rows).catch(() => {});
       }
     }
   }
@@ -194,30 +220,40 @@ class TerminalController {
     this.spawned = true;
     ptySpawn(
       { id: this.sessionId, shell: this.opts.shell, cwd: this.opts.cwd, cols, rows },
-      (bytes) => this.term.write(bytes),
+      (bytes) => {
+        // Guard: in-flight Channel bytes can arrive after dispose (xterm throws on a
+        // disposed Terminal, and the throw happens inside the channel callback).
+        if (!this.disposed) this.term.write(bytes);
+      },
     )
       .then(() => {
         // Auto-run a launch command (e.g. `claude`) once the shell has its first prompt.
         const cmd = this.opts.initCommand;
         if (cmd) {
-          setTimeout(() => void ptyWrite(this.sessionId, `${cmd}\r`), 600);
+          setTimeout(() => void ptyWrite(this.sessionId, `${cmd}\r`).catch(() => {}), 600);
         }
       })
       .catch((err) => {
-        this.term.write(`\r\n\x1b[38;5;203mFailed to start shell: ${String(err)}\x1b[0m\r\n`);
+        // Spawn failed: mark it so resize traffic stops, and correct the status dot
+        // (newSession optimistically set it to "running").
+        this.spawnFailed = true;
+        useRuntime.getState().setStatus(this.sessionId, "exited");
+        if (!this.disposed) {
+          this.term.write(`\r\n\x1b[38;5;203mFailed to start shell: ${String(err)}\x1b[0m\r\n`);
+        }
       });
   }
 
-  dispose(): void {
+  /** Tear down the terminal + PTY. Resolves once the backend kill has been processed,
+   *  so callers can safely respawn under the same session id. */
+  dispose(): Promise<void> {
+    this.disposed = true;
     this.ro?.disconnect();
-    if (this.webgl) {
-      this.webgl.dispose();
-      this.webgl = undefined;
-      webglCount = Math.max(0, webglCount - 1);
-    }
-    void ptyKill(this.sessionId);
+    this.releaseWebgl();
+    const killed = ptyKill(this.sessionId).catch(() => {});
     this.term.dispose();
     this.detach();
+    return killed;
   }
 }
 
@@ -242,12 +278,11 @@ export function hasTerminal(sessionId: string): boolean {
   return registry.has(sessionId);
 }
 
-export function disposeTerminal(sessionId: string): void {
+export function disposeTerminal(sessionId: string): Promise<void> {
   const c = registry.get(sessionId);
-  if (c) {
-    c.dispose();
-    registry.delete(sessionId);
-  }
+  if (!c) return Promise.resolve();
+  registry.delete(sessionId);
+  return c.dispose();
 }
 
 export function applySettingsToAll(opts: Partial<TerminalOpts>): void {

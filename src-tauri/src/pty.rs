@@ -6,16 +6,37 @@
 //! it removes the session (dropping the master closes the ConPTY, which makes the reader
 //! thread's blocking read return) and emits `pty://exit`. A cloned `ChildKiller` kept in
 //! the session map lets `kill()` terminate the process from another thread.
+//!
+//! Concurrency rules (hard-won, keep them):
+//! - The session entry is inserted into the map BEFORE the waiter thread starts, and it
+//!   carries a per-spawn `nonce`. The waiter removes the entry only if the nonce still
+//!   matches, so a stale waiter (from a killed predecessor whose id was reused) can
+//!   never remove or announce the death of a newer session.
+//! - Input writes go through a per-session writer THREAD over a bounded channel. The
+//!   map mutex is held only for the lookup; a stalled child (full conin pipe) makes
+//!   `write` return a typed error instead of freezing every other session and the UI.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{SyncSender, TrySendError};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
-use tauri::{AppHandle, Emitter};
+
+/// Grid-size sanity bounds - ConPTY rejects 0 rows/cols and absurd sizes break TUIs.
+const MIN_GRID: u16 = 2;
+const MAX_GRID: u16 = 500;
+/// Longest accepted session id (frontend uids are far shorter).
+const MAX_ID_LEN: usize = 128;
+/// Queued input writes per session before `write` errors instead of blocking.
+const WRITE_QUEUE: usize = 256;
+
+/// Monotonic spawn identity; lets a waiter know whether the map entry is still its own.
+static NEXT_NONCE: AtomicU64 = AtomicU64::new(1);
 
 /// How to launch a session's process. Sent from the frontend.
 #[derive(Debug, Clone, Deserialize)]
@@ -42,17 +63,14 @@ pub struct SpawnOpts {
     pub rows: u16,
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct ExitPayload {
-    id: String,
-}
-
 /// One live pseudo-terminal. The child itself lives in its waiter thread; we keep a
-/// cloned killer here so `kill()` works from the command thread.
+/// cloned killer + pid here so `kill()` works from the command thread.
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    writer_tx: SyncSender<Vec<u8>>,
     killer: Box<dyn ChildKiller + Send + Sync>,
+    child_pid: Option<u32>,
+    nonce: u64,
 }
 
 type Sessions = Arc<Mutex<HashMap<String, PtySession>>>;
@@ -64,10 +82,15 @@ pub struct PtyManager {
 }
 
 impl PtyManager {
-    /// Spawn a ConPTY, start its reader + waiter threads, and register it under `opts.id`.
+    /// Spawn a ConPTY, register it under `opts.id`, then start its reader, writer and
+    /// waiter threads. Registration happens BEFORE the waiter starts (see module docs).
+    ///
+    /// `on_exit` fires with the session id when the child exits on its own (not when the
+    /// user killed it). Taking a closure instead of an `AppHandle` keeps this module free
+    /// of the Tauri event system, so tests drive it without any mock runtime.
     pub fn spawn(
         &self,
-        app: AppHandle,
+        on_exit: impl FnOnce(String) + Send + 'static,
         opts: SpawnOpts,
         on_data: Channel<InvokeResponseBody>,
     ) -> Result<(), String> {
@@ -79,6 +102,13 @@ impl PtyManager {
             rows,
         } = opts;
 
+        if id.is_empty() || id.len() > MAX_ID_LEN {
+            return Err("invalid session id".to_string());
+        }
+        let cols = cols.clamp(MIN_GRID, MAX_GRID);
+        let rows = rows.clamp(MIN_GRID, MAX_GRID);
+
+        // Fast-path check; the authoritative occupied check happens at insert below.
         if self.sessions.lock().contains_key(&id) {
             return Err(format!("session '{id}' already running"));
         }
@@ -106,18 +136,50 @@ impl PtyManager {
         drop(pair.slave);
 
         let killer = child.clone_killer();
+        let child_pid = child.process_id();
         let mut reader = pair.master.try_clone_reader().map_err(|e| {
             tracing::error!(session = %id, error = %e, "try_clone_reader failed");
             format!("could not read pty: {e}")
         })?;
-        let writer = pair.master.take_writer().map_err(|e| {
+        let mut writer = pair.master.take_writer().map_err(|e| {
             tracing::error!(session = %id, error = %e, "take_writer failed");
             format!("could not write pty: {e}")
         })?;
 
+        let nonce = NEXT_NONCE.fetch_add(1, Ordering::Relaxed);
+        let (writer_tx, writer_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(WRITE_QUEUE);
+
+        // Register BEFORE any thread can observe the session. contains_key + insert under
+        // one guard makes the duplicate check atomic (no TOCTOU with a concurrent spawn).
+        {
+            let mut sessions = self.sessions.lock();
+            if sessions.contains_key(&id) {
+                drop(sessions);
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("session '{id}' already running"));
+            }
+            sessions.insert(
+                id.clone(),
+                PtySession {
+                    master: pair.master,
+                    writer_tx,
+                    killer,
+                    child_pid,
+                    nonce,
+                },
+            );
+        }
+
+        let cleanup_on_thread_error = |e: std::io::Error, what: &str| -> String {
+            self.sessions.lock().remove(&id);
+            tracing::error!(session = %id, error = %e, "could not start {what} thread");
+            format!("could not start {what} thread: {e}")
+        };
+
         // Reader thread: blocking reads -> raw bytes to the frontend Channel. Ends when
         // the master is dropped (on exit/kill) and the read returns 0 or errors.
-        std::thread::Builder::new()
+        if let Err(e) = std::thread::Builder::new()
             .name(format!("pty-read-{id}"))
             .spawn(move || {
                 let mut buf = [0u8; 8192];
@@ -136,53 +198,91 @@ impl PtyManager {
                     }
                 }
             })
-            .map_err(|e| format!("could not start reader thread: {e}"))?;
+        {
+            let msg = cleanup_on_thread_error(e, "reader");
+            let _ = child.kill();
+            return Err(msg);
+        }
+
+        // Writer thread: owns the conin writer. Exits when the session entry (and its
+        // Sender) is dropped, or on a write error. Keeps blocking writes off the map lock.
+        let write_id = id.clone();
+        if let Err(e) = std::thread::Builder::new()
+            .name(format!("pty-write-{id}"))
+            .spawn(move || {
+                while let Ok(data) = writer_rx.recv() {
+                    if let Err(e) = writer.write_all(&data).and_then(|_| writer.flush()) {
+                        tracing::warn!(session = %write_id, error = %e, "pty write failed");
+                        break;
+                    }
+                }
+            })
+        {
+            let msg = cleanup_on_thread_error(e, "writer");
+            let _ = child.kill();
+            return Err(msg);
+        }
 
         // Waiter thread: owns the child, blocks until it exits, then cleans up + notifies.
+        // Removes/announces ONLY if the map entry still carries this spawn's nonce; if the
+        // entry is gone the user already killed it (frontend knows), if the nonce differs
+        // a newer session reused the id and must be left alone.
         let wait_id = id.clone();
         let sessions_ref = self.sessions.clone();
-        std::thread::Builder::new()
+        if let Err(e) = std::thread::Builder::new()
             .name(format!("pty-wait-{id}"))
             .spawn(move || {
                 let _ = child.wait();
-                // Dropping the session drops the master, which closes the ConPTY and lets
-                // the reader thread finish.
-                sessions_ref.lock().remove(&wait_id);
-                if let Err(e) = app.emit("pty://exit", ExitPayload { id: wait_id.clone() }) {
-                    tracing::debug!(session = %wait_id, error = %e, "emit exit failed");
+                let owned = {
+                    let mut sessions = sessions_ref.lock();
+                    match sessions.get(&wait_id) {
+                        Some(s) if s.nonce == nonce => {
+                            // Dropping the entry drops the master, which closes the
+                            // ConPTY and lets the reader thread finish.
+                            sessions.remove(&wait_id);
+                            true
+                        }
+                        _ => false,
+                    }
+                };
+                if owned {
+                    tracing::info!(session = %wait_id, "pty exited");
+                    on_exit(wait_id);
                 }
-                tracing::info!(session = %wait_id, "pty exited");
             })
-            .map_err(|e| format!("could not start waiter thread: {e}"))?;
+        {
+            let msg = cleanup_on_thread_error(e, "waiter");
+            // The child was moved into the failed closure and dropped with it, and the
+            // killer went down with the removed map entry - kill via pid instead.
+            kill_tree(child_pid);
+            return Err(msg);
+        }
 
-        self.sessions.lock().insert(
-            id.clone(),
-            PtySession {
-                master: pair.master,
-                writer,
-                killer,
-            },
-        );
         tracing::info!(session = %id, "pty spawned");
         Ok(())
     }
 
     pub fn write(&self, id: &str, data: &[u8]) -> Result<(), String> {
-        let mut sessions = self.sessions.lock();
-        let session = sessions
-            .get_mut(id)
-            .ok_or_else(|| format!("no session '{id}'"))?;
-        session
-            .writer
-            .write_all(data)
-            .and_then(|_| session.writer.flush())
-            .map_err(|e| {
-                tracing::warn!(session = %id, error = %e, "pty write failed");
-                format!("write failed: {e}")
-            })
+        let tx = {
+            let sessions = self.sessions.lock();
+            let session = sessions
+                .get(id)
+                .ok_or_else(|| format!("no session '{id}'"))?;
+            session.writer_tx.clone()
+        };
+        // Send outside the lock: a stalled child must never block other sessions.
+        tx.try_send(data.to_vec()).map_err(|e| match e {
+            TrySendError::Full(_) => {
+                tracing::warn!(session = %id, "pty input queue full, write rejected");
+                format!("session '{id}' is not accepting input (queue full)")
+            }
+            TrySendError::Disconnected(_) => format!("session '{id}' closed"),
+        })
     }
 
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<(), String> {
+        let cols = cols.clamp(MIN_GRID, MAX_GRID);
+        let rows = rows.clamp(MIN_GRID, MAX_GRID);
         let sessions = self.sessions.lock();
         let session = sessions
             .get(id)
@@ -202,7 +302,9 @@ impl PtyManager {
     }
 
     pub fn kill(&self, id: &str) -> Result<(), String> {
-        if let Some(mut session) = self.sessions.lock().remove(id) {
+        let removed = { self.sessions.lock().remove(id) };
+        if let Some(mut session) = removed {
+            kill_tree(session.child_pid);
             let _ = session.killer.kill();
             tracing::info!(session = %id, "pty killed");
         }
@@ -211,13 +313,45 @@ impl PtyManager {
 
     /// Kill every live session. Called on app exit so no ConPTY children leak.
     pub fn kill_all(&self) {
-        let mut sessions = self.sessions.lock();
-        for (id, mut session) in sessions.drain() {
+        let drained: Vec<(String, PtySession)> = {
+            let mut sessions = self.sessions.lock();
+            sessions.drain().collect()
+        };
+        for (id, mut session) in drained {
+            kill_tree(session.child_pid);
             let _ = session.killer.kill();
             tracing::debug!(session = %id, "pty killed on shutdown");
         }
     }
+
+    #[cfg(test)]
+    fn has_session(&self, id: &str) -> bool {
+        self.sessions.lock().contains_key(id)
+    }
+
+    #[cfg(test)]
+    fn session_count(&self) -> usize {
+        self.sessions.lock().len()
+    }
 }
+
+/// Best-effort kill of the whole process tree under the session's shell, so
+/// grandchildren (node dev servers etc.) do not outlive a closed pane. The direct
+/// child is then killed via `ChildKiller` regardless.
+#[cfg(windows)]
+fn kill_tree(pid: Option<u32>) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if let Some(pid) = pid {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &pid.to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+}
+
+#[cfg(not(windows))]
+fn kill_tree(_pid: Option<u32>) {}
 
 fn build_command(shell: &ShellSpec, cwd: Option<&str>) -> CommandBuilder {
     let mut cmd = match shell {
@@ -249,6 +383,40 @@ fn build_command(shell: &ShellSpec, cwd: Option<&str>) -> CommandBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
+
+    fn test_channel() -> Channel<InvokeResponseBody> {
+        Channel::new(|_| Ok(()))
+    }
+
+    fn spawn_opts(id: &str, shell: ShellSpec) -> SpawnOpts {
+        SpawnOpts {
+            id: id.to_string(),
+            shell,
+            cwd: None,
+            cols: 80,
+            rows: 24,
+        }
+    }
+
+    fn fast_exit_shell() -> ShellSpec {
+        ShellSpec::Custom {
+            program: "cmd.exe".to_string(),
+            args: vec!["/c".to_string(), "exit".to_string()],
+        }
+    }
+
+    /// Poll until `cond` is true or the budget runs out.
+    fn wait_until(budget: Duration, mut cond: impl FnMut() -> bool) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < budget {
+            if cond() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        cond()
+    }
 
     // Verifies the PTY round-trip against a real ConPTY: spawn `cmd /c echo` and read its
     // output through the same reader path the app uses. The read runs on a helper thread
@@ -257,7 +425,6 @@ mod tests {
     #[test]
     fn spawns_conpty_and_reads_output() {
         use std::sync::mpsc::{channel, RecvTimeoutError};
-        use std::time::{Duration, Instant};
 
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -317,5 +484,139 @@ mod tests {
             out.contains("warsha_pty_ok"),
             "expected echo output within 6s, got: {out:?}"
         );
+    }
+
+    // A child that exits instantly must not leave a zombie map entry (the old bug: the
+    // waiter ran before the insert, found nothing to remove, and the dead entry then
+    // blocked the id forever). After it drains, the same id must be reusable, and the
+    // exit callback must have fired exactly for the owned session.
+    #[test]
+    fn fast_exit_leaves_no_zombie_and_id_is_reusable() {
+        let manager = PtyManager::default();
+        let exits: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
+        let sink = exits.clone();
+        manager
+            .spawn(
+                move |id| sink.lock().push(id),
+                spawn_opts("fast1", fast_exit_shell()),
+                test_channel(),
+            )
+            .expect("first spawn");
+        // ConPTY blocks the child on its startup cursor-position query (ESC[6n) until
+        // the "terminal" answers; xterm does that in the app, the test does it here.
+        assert!(
+            wait_until(Duration::from_secs(6), || {
+                let _ = manager.write("fast1", b"\x1b[1;1R");
+                !manager.has_session("fast1")
+            }),
+            "fast-exit session was never removed from the map (zombie entry)"
+        );
+        assert_eq!(exits.lock().as_slice(), ["fast1"], "exit callback must fire once");
+
+        manager
+            .spawn(|_| {}, spawn_opts("fast1", fast_exit_shell()), test_channel())
+            .expect("respawn with the same id after fast exit");
+        assert!(
+            wait_until(Duration::from_secs(6), || {
+                let _ = manager.write("fast1", b"\x1b[1;1R");
+                manager.session_count() == 0
+            }),
+            "respawned fast-exit session was never removed"
+        );
+    }
+
+    // kill() then an immediate respawn under the same id: the stale waiter from the
+    // killed child must NOT remove the new session (the old bug: no nonce check), and
+    // must NOT announce an exit for it either.
+    #[test]
+    fn kill_then_respawn_same_id_survives_stale_waiter() {
+        let manager = PtyManager::default();
+        let exits: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
+        let sink = exits.clone();
+        manager
+            .spawn(
+                move |id| sink.lock().push(id),
+                spawn_opts("re1", ShellSpec::Cmd),
+                test_channel(),
+            )
+            .expect("first spawn");
+        assert!(manager.has_session("re1"));
+
+        manager.kill("re1").expect("kill");
+        manager
+            .spawn(|_| {}, spawn_opts("re1", ShellSpec::Cmd), test_channel())
+            .expect("respawn after kill");
+
+        // Give the stale waiter ample time to fire; the new session must survive it.
+        std::thread::sleep(Duration::from_millis(1500));
+        assert!(
+            manager.has_session("re1"),
+            "stale waiter removed the respawned session"
+        );
+        assert!(
+            exits.lock().is_empty(),
+            "user-killed session must not fire the exit callback"
+        );
+        manager.kill("re1").expect("cleanup kill");
+    }
+
+    // Unknown ids: write/resize return typed errors, kill is idempotent, and a write
+    // after kill errors instead of hanging.
+    #[test]
+    fn unknown_id_paths_error_cleanly() {
+        let manager = PtyManager::default();
+
+        assert!(manager.write("ghost", b"x").unwrap_err().contains("no session"));
+        assert!(manager.resize("ghost", 80, 24).unwrap_err().contains("no session"));
+        assert!(manager.kill("ghost").is_ok());
+
+        manager
+            .spawn(|_| {}, spawn_opts("w1", ShellSpec::Cmd), test_channel())
+            .expect("spawn");
+        manager.kill("w1").expect("kill");
+        let err = manager.write("w1", b"echo hi\r").unwrap_err();
+        assert!(err.contains("no session"), "write after kill: {err}");
+    }
+
+    // Spawn-arg validation at the boundary.
+    #[test]
+    fn spawn_rejects_bad_ids() {
+        let manager = PtyManager::default();
+        assert!(manager
+            .spawn(|_| {}, spawn_opts("", fast_exit_shell()), test_channel())
+            .is_err());
+        let long_id = "x".repeat(200);
+        assert!(manager
+            .spawn(|_| {}, spawn_opts(&long_id, fast_exit_shell()), test_channel())
+            .is_err());
+    }
+
+    // build_command is pure: TERM is always set, missing/empty cwd is skipped, custom
+    // args keep their order.
+    #[test]
+    fn build_command_sets_term_and_validates_cwd() {
+        let cmd = build_command(&ShellSpec::Powershell, None);
+        assert_eq!(cmd.get_env("TERM").and_then(|v| v.to_str()), Some("xterm-256color"));
+
+        let cmd = build_command(&ShellSpec::Cmd, Some("C:\\warsha-definitely-missing-dir"));
+        assert!(cmd.get_cwd().is_none(), "nonexistent cwd must be skipped");
+        let cmd = build_command(&ShellSpec::Cmd, Some(""));
+        assert!(cmd.get_cwd().is_none(), "empty cwd must be skipped");
+
+        let cmd = build_command(
+            &ShellSpec::Custom {
+                program: "foo.exe".to_string(),
+                args: vec!["a".to_string(), "b".to_string()],
+            },
+            None,
+        );
+        let argv: Vec<String> = cmd
+            .get_argv()
+            .iter()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(argv, vec!["foo.exe", "a", "b"]);
     }
 }

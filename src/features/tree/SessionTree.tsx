@@ -68,7 +68,7 @@ export function SessionTree() {
         <button className="icon-btn" title="Settings" onClick={() => setSettings(true)}>
           <Settings size={16} />
         </button>
-        <button className="icon-btn" title="Hide sidebar (Ctrl+B)" onClick={() => setSidebar(false)}>
+        <button className="icon-btn" title="Hide sidebar (Ctrl+Shift+B)" onClick={() => setSidebar(false)}>
           <PanelLeftClose size={16} />
         </button>
       </div>
@@ -267,7 +267,7 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
       )}
       {!editing && (
         <span className="row-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn sm" title="Restart" onClick={() => restartSession(id)}>
+          <button className="icon-btn sm" title="Restart" onClick={() => void restartSession(id)}>
             <RotateCcw size={13} />
           </button>
           <button

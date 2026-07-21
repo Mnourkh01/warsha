@@ -80,10 +80,16 @@ export const useWorkspaces = create<WsState>((set, get) => {
         if (workspaces.length === 0) workspaces = [makeWs("Workspace 1")];
         const sessions = { ...s.sessions };
         removed.forEach((sid) => delete sessions[sid]);
-        const activeWorkspaceId = workspaces.some((w) => w.id === s.activeWorkspaceId)
-          ? s.activeWorkspaceId
-          : workspaces[0].id;
-        return { workspaces, sessions, activeWorkspaceId, activeSessionId: null };
+        const wasActive = !workspaces.some((w) => w.id === s.activeWorkspaceId);
+        const activeWorkspaceId = wasActive ? workspaces[0].id : s.activeWorkspaceId;
+        // Deleting a BACKGROUND workspace must not steal focus from the session the
+        // user is looking at; only re-point focus when the active workspace died.
+        const activeSessionId = wasActive
+          ? (workspaces[0].sessionIds[0] ?? null)
+          : removed.includes(s.activeSessionId ?? "")
+            ? null
+            : s.activeSessionId;
+        return { workspaces, sessions, activeWorkspaceId, activeSessionId };
       });
       return removed;
     },
@@ -126,10 +132,13 @@ export const useWorkspaces = create<WsState>((set, get) => {
       set((s) => {
         const sessions = { ...s.sessions };
         delete sessions[id];
-        const workspaces = s.workspaces.map((w) => ({
-          ...w,
-          sessionIds: w.sessionIds.filter((x) => x !== id),
-        }));
+        // Only rebuild the workspace that actually holds the session; untouched
+        // workspaces keep their references (selector stability).
+        const workspaces = s.workspaces.map((w) =>
+          w.sessionIds.includes(id)
+            ? { ...w, sessionIds: w.sessionIds.filter((x) => x !== id) }
+            : w,
+        );
         const activeSessionId =
           s.activeSessionId === id
             ? (workspaces.find((w) => w.id === s.activeWorkspaceId)?.sessionIds[0] ?? null)
@@ -168,12 +177,22 @@ export const useWorkspaces = create<WsState>((set, get) => {
       if (!target || target.sessionIds.length >= MAX_PER_WS || target.sessionIds.includes(sessionId)) {
         return false;
       }
-      set((s) => ({
-        workspaces: s.workspaces.map((w) => {
+      set((s) => {
+        const workspaces = s.workspaces.map((w) => {
           if (w.id === targetWsId) return { ...w, sessionIds: [...w.sessionIds, sessionId] };
-          return { ...w, sessionIds: w.sessionIds.filter((x) => x !== sessionId) };
-        }),
-      }));
+          if (w.sessionIds.includes(sessionId))
+            return { ...w, sessionIds: w.sessionIds.filter((x) => x !== sessionId) };
+          return w;
+        });
+        // If the focused session was dragged out of the visible workspace, focus falls
+        // back to that workspace's first remaining session (no dangling pointer).
+        let activeSessionId = s.activeSessionId;
+        if (s.activeSessionId === sessionId && s.activeWorkspaceId !== targetWsId) {
+          const current = workspaces.find((w) => w.id === s.activeWorkspaceId);
+          activeSessionId = current?.sessionIds[0] ?? null;
+        }
+        return { workspaces, activeSessionId };
+      });
       return true;
     },
 
@@ -188,14 +207,33 @@ export const useWorkspaces = create<WsState>((set, get) => {
 
     hydrate: (data) => {
       const d = data as Partial<WsPersist> | undefined;
-      if (d && Array.isArray(d.workspaces) && d.workspaces.length > 0 && d.sessions) {
-        const sessions = d.sessions;
+      if (
+        d &&
+        Array.isArray(d.workspaces) &&
+        d.workspaces.length > 0 &&
+        d.sessions &&
+        typeof d.sessions === "object"
+      ) {
+        const raw = d.sessions;
         const workspaces = d.workspaces.map((w) => ({
           id: w.id,
           name: w.name,
-          sessionIds: (w.sessionIds ?? []).filter((id) => sessions[id]).slice(0, MAX_PER_WS),
+          sessionIds: (Array.isArray(w.sessionIds) ? w.sessionIds : [])
+            .filter((id) => raw[id])
+            .slice(0, MAX_PER_WS),
         }));
-        set({ workspaces, sessions, activeWorkspaceId: workspaces[0].id, activeSessionId: null });
+        // Drop orphan sessions (in the map but in no workspace) so a corrupt blob can't
+        // leak entries that re-persist forever.
+        const keep = new Set(workspaces.flatMap((w) => w.sessionIds));
+        const sessions: Record<string, Session> = {};
+        for (const [sid, sess] of Object.entries(raw)) {
+          if (keep.has(sid)) sessions[sid] = sess;
+        }
+        // Restore the workspace the user was in, not always the first one.
+        const activeWorkspaceId = workspaces.some((w) => w.id === d.activeWorkspaceId)
+          ? (d.activeWorkspaceId as string)
+          : workspaces[0].id;
+        set({ workspaces, sessions, activeWorkspaceId, activeSessionId: null });
       } else {
         const f = makeWs("Workspace 1");
         set({ workspaces: [f], sessions: {}, activeWorkspaceId: f.id, activeSessionId: null });

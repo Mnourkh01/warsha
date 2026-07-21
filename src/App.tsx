@@ -43,34 +43,48 @@ export default function App() {
   // Mark sessions exited and print a notice when their process ends.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     onPtyExit((id) => {
       useRuntime.getState().setStatus(id, "exited");
       getTerminal(id)?.notifyExit();
     })
       .then((u) => {
-        unlisten = u;
+        // If the effect was cleaned up before listen() resolved (StrictMode dev
+        // remount), unlisten immediately or the listener leaks forever.
+        if (cancelled) u();
+        else unlisten = u;
       })
       .catch(() => {
         /* IPC unavailable (e.g. running the frontend outside Tauri) */
       });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   // Global shortcuts, capture phase so they beat the focused terminal.
+  // Ctrl+B is deliberately NOT intercepted (tmux prefix); sidebar uses Ctrl+Shift+B.
+  // Ctrl+Shift+P is a palette alias for muscle memory from other terminals.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const ui = useUI.getState();
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "k" || e.key === "K")) {
+      const key = e.key.toLowerCase();
+      const paletteChord =
+        e.ctrlKey && !e.altKey && ((!e.shiftKey && key === "k") || (e.shiftKey && key === "p"));
+      if (paletteChord) {
         e.preventDefault();
         e.stopPropagation();
         ui.setPalette(!ui.paletteOpen);
-      } else if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "b" || e.key === "B")) {
+      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "b") {
         e.preventDefault();
         e.stopPropagation();
         ui.toggleSidebar();
       } else if (e.key === "Escape") {
+        // Close topmost-first, one layer per press.
         if (ui.paletteOpen) ui.setPalette(false);
-        if (ui.settingsOpen) ui.setSettings(false);
+        else if (ui.newSessionOpen) ui.setNewSession(false);
+        else if (ui.settingsOpen) ui.setSettings(false);
       }
     };
     window.addEventListener("keydown", onKey, true);
@@ -84,7 +98,7 @@ export default function App() {
       ) : (
         <button
           className="sidebar-show"
-          title="Show sidebar (Ctrl+B)"
+          title="Show sidebar (Ctrl+Shift+B)"
           onClick={() => useUI.getState().setSidebar(true)}
         >
           <PanelLeftOpen size={16} />

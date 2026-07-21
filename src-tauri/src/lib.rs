@@ -12,7 +12,9 @@ pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warsha=info")),
+                // NB: the lib crate is `warsha_lib` (Cargo.toml [lib]), so tracing targets
+                // are `warsha_lib::...` - "warsha" would match nothing and drop all logs.
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warsha_lib=info")),
         )
         .init();
 
@@ -29,6 +31,7 @@ pub fn run() {
             commands::which_program,
             commands::session_state_load,
             commands::session_state_save,
+            commands::session_state_backup,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

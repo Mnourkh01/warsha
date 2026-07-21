@@ -41,6 +41,28 @@ pub fn load(app: &AppHandle) -> Result<Option<Value>, String> {
     Ok(Some(value))
 }
 
+/// Copy the current state file to `state.<label>.bak.json`. Used before a
+/// version-mismatch reset so old data is never silently destroyed. The label is
+/// sanitized here (boundary validation): alphanumerics, `-` and `_` only.
+pub fn backup(app: &AppHandle, label: &str) -> Result<(), String> {
+    let path = state_path(app)?;
+    if !path.exists() {
+        return Ok(());
+    }
+    let safe: String = label
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .take(32)
+        .collect();
+    let name = if safe.is_empty() { "backup".to_string() } else { safe };
+    let dest = path.with_file_name(format!("state.{name}.bak.json"));
+    fs::copy(&path, &dest).map_err(|e| {
+        tracing::warn!(error = %e, "backup state failed");
+        format!("backup state failed: {e}")
+    })?;
+    Ok(())
+}
+
 /// Persist the workspace blob atomically.
 pub fn save(app: &AppHandle, state: &Value) -> Result<(), String> {
     let path = state_path(app)?;

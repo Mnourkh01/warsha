@@ -3,7 +3,10 @@
 
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { CloseRequestedEvent } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ShellKind } from "./types";
 
 export interface SpawnOpts {
@@ -71,4 +74,28 @@ export async function loadState<T>(): Promise<T | null> {
 
 export async function saveState(state: unknown): Promise<void> {
   await invoke("session_state_save", { state });
+}
+
+/** Back up the current state file as state.<label>.bak.json (label sanitized in Rust). */
+export async function sessionStateBackup(label: string): Promise<void> {
+  await invoke("session_state_backup", { label });
+}
+
+/** Open a link in the SYSTEM browser, never inside the WebView. Terminal output is
+ *  untrusted, so only http/https ever leaves the app. */
+export async function openExternal(url: string): Promise<void> {
+  if (!/^https?:\/\//i.test(url)) return;
+  await openUrl(url);
+}
+
+/** Run `handler` when the user asks to close the window. Returns an unlisten fn. */
+export function onWindowCloseRequested(
+  handler: (event: CloseRequestedEvent) => void | Promise<void>,
+): Promise<UnlistenFn> {
+  return getCurrentWindow().onCloseRequested(handler);
+}
+
+/** Destroy the window immediately (bypasses close-requested handlers). */
+export async function destroyAppWindow(): Promise<void> {
+  await getCurrentWindow().destroy();
 }
