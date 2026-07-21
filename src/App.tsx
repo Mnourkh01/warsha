@@ -12,6 +12,10 @@ import { applyTheme, resolveTheme } from "./lib/theme";
 import { applySettingsToAll, getTerminal } from "./features/terminal/controller";
 import { onPtyExit } from "./lib/ipc";
 
+// Browser accelerators WebView2 would otherwise hijack from app chrome:
+// print, find, view-source, save, downloads, find-next.
+const BROWSER_CHORDS = new Set(["p", "f", "u", "s", "j", "g"]);
+
 export default function App() {
   const theme = useSettings((s) => s.theme);
   const terminalTheme = useSettings((s) => s.terminalTheme);
@@ -85,10 +89,36 @@ export default function App() {
         if (ui.paletteOpen) ui.setPalette(false);
         else if (ui.newSessionOpen) ui.setNewSession(false);
         else if (ui.settingsOpen) ui.setSettings(false);
+      } else if (
+        e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        BROWSER_CHORDS.has(key) &&
+        !(e.target as HTMLElement | null)?.closest?.(".xterm")
+      ) {
+        // WebView2 leaks browser accelerators (print/find/save dialogs). Inside a
+        // terminal xterm suppresses them itself; block them for the app chrome too.
+        e.preventDefault();
+      } else if (e.ctrlKey && !e.altKey && (key === "+" || key === "-" || key === "=" || key === "0")) {
+        // Browser zoom desyncs the terminal grid from its cell metrics. Font size
+        // changes go through Settings instead.
+        e.preventDefault();
+      } else if (e.key === "F7") {
+        e.preventDefault(); // caret-browsing prompt
+      } else if (import.meta.env.PROD && (e.key === "F5" || (e.ctrlKey && key === "r"))) {
+        e.preventDefault(); // a reload would orphan every live terminal
       }
     };
+    // Ctrl+wheel is WebView2 zoom; same grid-desync problem as keyboard zoom.
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) e.preventDefault();
+    };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("wheel", onWheel, true);
+    };
   }, []);
 
   return (

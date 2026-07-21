@@ -58,17 +58,38 @@ fn load_from(path: &Path) -> Result<Option<Value>, String> {
     Ok(Some(value))
 }
 
+/// Hard cap on the persisted blob. The real state is a few KB; anything near this is a
+/// bug or a compromised WebView trying to disk-fill (boundary validation).
+const MAX_STATE_BYTES: usize = 5 * 1024 * 1024;
+
 fn save_to(path: &Path, state: &Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create config dir failed: {e}"))?;
     }
     let body = serde_json::to_string_pretty(state).map_err(|e| format!("serialize failed: {e}"))?;
+    if body.len() > MAX_STATE_BYTES {
+        tracing::warn!(bytes = body.len(), "state blob over limit, save rejected");
+        return Err("state too large to save".to_string());
+    }
 
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, body).map_err(|e| {
-        tracing::warn!(error = %e, "write temp state failed");
-        format!("write state failed: {e}")
-    })?;
+    {
+        use std::io::Write;
+        let mut f = fs::File::create(&tmp).map_err(|e| {
+            tracing::warn!(error = %e, "create temp state failed");
+            format!("write state failed: {e}")
+        })?;
+        f.write_all(body.as_bytes()).map_err(|e| {
+            tracing::warn!(error = %e, "write temp state failed");
+            format!("write state failed: {e}")
+        })?;
+        // fsync BEFORE the rename: on power loss NTFS may persist the rename first,
+        // which would leave an empty/corrupt state.json.
+        f.sync_all().map_err(|e| {
+            tracing::warn!(error = %e, "sync temp state failed");
+            format!("write state failed: {e}")
+        })?;
+    }
     fs::rename(&tmp, path).map_err(|e| {
         tracing::warn!(error = %e, "rename state failed");
         format!("save state failed: {e}")
