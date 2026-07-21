@@ -1,7 +1,9 @@
 import type { ThemeMode } from "./types";
 
 function systemPrefersDark(): boolean {
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
+  // Dark is the safe default when matchMedia is unavailable (tests, odd webviews).
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 export function resolveTheme(mode: ThemeMode): "dark" | "light" {

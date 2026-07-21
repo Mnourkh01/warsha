@@ -5,7 +5,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { CloseRequestedEvent } from "@tauri-apps/api/window";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ShellKind } from "./types";
 
@@ -52,9 +52,11 @@ export async function ptyKill(id: string): Promise<void> {
   await invoke("pty_kill", { id });
 }
 
-/** Subscribe to session-exit notifications. Returns an unlisten function. */
-export function onPtyExit(cb: (id: string) => void): Promise<UnlistenFn> {
-  return listen<{ id: string }>("pty://exit", (e) => cb(e.payload.id));
+/** Subscribe to session-exit notifications (id + process exit code). */
+export function onPtyExit(cb: (id: string, code: number) => void): Promise<UnlistenFn> {
+  return listen<{ id: string; code: number }>("pty://exit", (e) =>
+    cb(e.payload.id, e.payload.code),
+  );
 }
 
 /** Full path of a program if it is on PATH, else null. */
@@ -66,6 +68,11 @@ export async function whichProgram(program: string): Promise<string | null> {
 export async function pickFolder(title?: string): Promise<string | null> {
   const res = await openDialog({ directory: true, multiple: false, title });
   return typeof res === "string" ? res : null;
+}
+
+/** Native yes/no confirmation. Returns true when the user confirms. */
+export async function confirmDialog(message: string, title?: string): Promise<boolean> {
+  return ask(message, { title, kind: "warning" });
 }
 
 export async function loadState<T>(): Promise<T | null> {

@@ -1,0 +1,78 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const controller = vi.hoisted(() => ({
+  disposeTerminal: vi.fn<(id: string) => Promise<void>>().mockResolvedValue(undefined),
+  getTerminal: vi.fn().mockReturnValue(undefined),
+}));
+vi.mock("./features/terminal/controller", () => controller);
+
+import { closeSession, deleteWorkspace, newSession, restartSession } from "./actions";
+import { useWorkspaces } from "./store/workspaces";
+import { useRuntime } from "./store/runtime";
+
+// The exact hard-won failure class from CLAUDE.md: a session gone from the UI while its
+// ConPTY child leaks, or a stale "running" dot on a dead pane. These tests pin the
+// orchestration: store + terminal registry + runtime status always move together.
+describe("actions orchestration", () => {
+  beforeEach(() => {
+    controller.disposeTerminal.mockClear();
+    useRuntime.setState({ status: {}, epoch: {} });
+    useWorkspaces.getState().hydrate({
+      workspaces: [{ id: "w1", name: "Workspace 1", sessionIds: [] }],
+      sessions: {},
+      activeWorkspaceId: "w1",
+    });
+  });
+
+  it("newSession registers the session and marks it running", () => {
+    const id = newSession({ shell: { kind: "cmd" }, name: "test" })!;
+    expect(id).toBeTruthy();
+    expect(useWorkspaces.getState().sessions[id]).toBeTruthy();
+    expect(useRuntime.getState().status[id]).toBe("running");
+  });
+
+  it("newSession on a full workspace adds nothing and sets no status", () => {
+    for (let i = 0; i < 6; i++) newSession({ shell: { kind: "cmd" }, name: `s${i}` });
+    const id = newSession({ shell: { kind: "cmd" }, name: "overflow" });
+    expect(id).toBeNull();
+    expect(Object.keys(useRuntime.getState().status)).toHaveLength(6);
+  });
+
+  it("closeSession removes the session, kills the terminal, and clears runtime state", () => {
+    const id = newSession({ shell: { kind: "cmd" }, name: "bye" })!;
+    useRuntime.getState().bumpEpoch(id);
+    closeSession(id);
+    expect(useWorkspaces.getState().sessions[id]).toBeUndefined();
+    expect(controller.disposeTerminal).toHaveBeenCalledWith(id);
+    expect(useRuntime.getState().status[id]).toBeUndefined();
+    expect(useRuntime.getState().epoch[id]).toBeUndefined();
+  });
+
+  it("restartSession disposes FIRST, then remounts via a fresh epoch", async () => {
+    const id = newSession({ shell: { kind: "cmd" }, name: "again" })!;
+    let epochAtDispose = -1;
+    controller.disposeTerminal.mockImplementationOnce((sid) => {
+      epochAtDispose = useRuntime.getState().epoch[sid] ?? 0;
+      return Promise.resolve();
+    });
+    await restartSession(id);
+    // The kill completed while the epoch was still old; the bump came after.
+    expect(epochAtDispose).toBe(0);
+    expect(useRuntime.getState().epoch[id]).toBe(1);
+    expect(useRuntime.getState().status[id]).toBe("running");
+  });
+
+  it("deleteWorkspace disposes every session it contained", () => {
+    const a = newSession({ shell: { kind: "cmd" }, name: "a" })!;
+    const b = newSession({ shell: { kind: "cmd" }, name: "b" })!;
+    const w2 = useWorkspaces.getState().addWorkspace("W2");
+    expect(w2).toBeTruthy();
+    // back to w1 which holds a + b
+    useWorkspaces.getState().setActiveWorkspace("w1");
+    deleteWorkspace("w1");
+    expect(controller.disposeTerminal).toHaveBeenCalledWith(a);
+    expect(controller.disposeTerminal).toHaveBeenCalledWith(b);
+    expect(useRuntime.getState().status[a]).toBeUndefined();
+    expect(useRuntime.getState().status[b]).toBeUndefined();
+  });
+});

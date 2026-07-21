@@ -44,9 +44,9 @@ export default function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    onPtyExit((id) => {
+    onPtyExit((id, code) => {
       useRuntime.getState().setStatus(id, "exited");
-      getTerminal(id)?.notifyExit();
+      getTerminal(id)?.notifyExit(code);
     })
       .then((u) => {
         // If the effect was cleaned up before listen() resolved (StrictMode dev
@@ -99,6 +99,7 @@ export default function App() {
         <button
           className="sidebar-show"
           title="Show sidebar (Ctrl+Shift+B)"
+          aria-label="Show sidebar"
           onClick={() => useUI.getState().setSidebar(true)}
         >
           <PanelLeftOpen size={16} />

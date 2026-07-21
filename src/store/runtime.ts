@@ -17,9 +17,12 @@ export const useRuntime = create<RuntimeState>((set) => ({
   setStatus: (id, status) => set((s) => ({ status: { ...s.status, [id]: status } })),
   clearStatus: (id) =>
     set((s) => {
+      // Session is gone: drop its status AND its restart epoch (unbounded otherwise).
       const status = { ...s.status };
+      const epoch = { ...s.epoch };
       delete status[id];
-      return { status };
+      delete epoch[id];
+      return { status, epoch };
     }),
   bumpEpoch: (id) => set((s) => ({ epoch: { ...s.epoch, [id]: (s.epoch[id] ?? 0) + 1 } })),
 }));

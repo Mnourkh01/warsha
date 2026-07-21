@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowLeft, Check, Copy, FolderOpen, Folder } from "lucide-react";
 import { useUI } from "../../store/ui";
 import { useSettings } from "../../store/settings";
-import { useWorkspaces } from "../../store/workspaces";
+import { MAX_PER_WS, useWorkspaces } from "../../store/workspaces";
 import { newSession } from "../../actions";
 import { pickFolder, whichProgram } from "../../lib/ipc";
 import { SESSION_TYPES, type SessionType } from "../../lib/sessionTypes";
+import { DialogTrap } from "../../lib/dialog-trap";
 import { SessionIcon } from "../icons";
+
+const FULL_MSG = `This workspace already has ${MAX_PER_WS} sessions. Make a new workspace or close one.`;
 
 export function NewSessionDialog() {
   const open = useUI((s) => s.newSessionOpen);
@@ -14,7 +17,7 @@ export function NewSessionDialog() {
   const defaultCwd = useSettings((s) => s.defaultCwd);
   const activeFull = useWorkspaces((s) => {
     const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
-    return !!ws && ws.sessionIds.length >= 6;
+    return !!ws && ws.sessionIds.length >= MAX_PER_WS;
   });
 
   const [selected, setSelected] = useState<SessionType | null>(null);
@@ -22,6 +25,7 @@ export function NewSessionDialog() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
 
   if (!open) return null;
 
@@ -57,14 +61,14 @@ export function NewSessionDialog() {
   const start = async (folder: string | null) => {
     if (!selected) return;
     if (activeFull) {
-      setError("This workspace already has 6 sessions. Make a new workspace or close one.");
+      setError(FULL_MSG);
       return;
     }
     const cwd = folder ?? undefined;
     const base = cwd ? cwd.split(/[\\/]/).filter(Boolean).pop() || cwd : selected.label;
     const id = newSession({ shell: selected.shell, name: `${selected.label} · ${base}`, cwd, typeId: selected.id });
     if (!id) {
-      setError("This workspace already has 6 sessions. Make a new workspace or close one.");
+      setError(FULL_MSG);
       return;
     }
     close();
@@ -105,10 +109,16 @@ export function NewSessionDialog() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="picker" role="dialog" aria-label="New session">
+      <div className="picker" role="dialog" aria-modal="true" aria-label="New session" ref={boxRef}>
+        <DialogTrap containerRef={boxRef} />
         <div className="picker-head">
           {selected ? (
-            <button className="icon-btn" title="Back" onClick={() => setSelected(null)}>
+            <button
+              className="icon-btn"
+              title="Back"
+              aria-label="Back to session types"
+              onClick={() => setSelected(null)}
+            >
               <ArrowLeft size={16} />
             </button>
           ) : null}
@@ -119,7 +129,7 @@ export function NewSessionDialog() {
           </span>
         </div>
 
-        <div className="picker-body">
+        <div className="picker-body" aria-busy={busy}>
           {!selected ? (
             <>
               <div className="picker-group-label">Shells</div>
@@ -131,7 +141,12 @@ export function NewSessionDialog() {
                   <div className="install-title">{missing.label} is not installed. Run this to add it:</div>
                   <div className="install-row">
                     <code>{missing.install}</code>
-                    <button className="icon-btn" title="Copy" onClick={() => copy(missing.install)}>
+                    <button
+                      className="icon-btn"
+                      title="Copy"
+                      aria-label="Copy install command"
+                      onClick={() => copy(missing.install)}
+                    >
                       {copied ? <Check size={14} /> : <Copy size={14} />}
                     </button>
                   </div>
@@ -164,7 +179,7 @@ export function NewSessionDialog() {
 
         <div className="picker-foot">
           <FolderOpen size={14} />
-          <span>Sessions open in the active workspace (up to 6).</span>
+          <span>Sessions open in the active workspace (up to {MAX_PER_WS}).</span>
         </div>
       </div>
     </div>

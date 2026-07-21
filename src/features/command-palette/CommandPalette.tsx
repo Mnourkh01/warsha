@@ -11,6 +11,7 @@ import {
   openSession,
   switchWorkspace,
 } from "../../actions";
+import { DialogTrap } from "../../lib/dialog-trap";
 import { SessionIcon } from "../icons";
 
 interface Command {
@@ -34,6 +35,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
 
   const commands = useMemo<Command[]>(() => {
     const base: Command[] = [
@@ -153,10 +155,12 @@ export function CommandPalette() {
         if (e.target === e.currentTarget) setPalette(false);
       }}
     >
-      <div className="palette" role="dialog" aria-label="Command palette">
+      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" ref={boxRef}>
+        <DialogTrap containerRef={boxRef} />
         <input
           ref={inputRef}
           className="palette-input"
+          aria-label="Search commands"
           placeholder="Type a command, workspace, or session name..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -175,13 +179,15 @@ export function CommandPalette() {
             }
           }}
         />
-        <div className="palette-list">
+        <div className="palette-list" role="listbox" aria-label="Commands">
           {filtered.length === 0 ? (
             <div className="palette-empty">No matching commands.</div>
           ) : (
             filtered.map((cmd, i) => (
               <div
                 key={cmd.id}
+                role="option"
+                aria-selected={i === index}
                 className={`palette-item${i === index ? " active" : ""}`}
                 onMouseEnter={() => setIndex(i)}
                 onMouseDown={(e) => {

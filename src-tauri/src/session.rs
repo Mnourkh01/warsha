@@ -4,9 +4,12 @@
 //! layout. Rust just persists an opaque JSON blob to `app_config_dir/state.json` so the
 //! Rust side never has to duplicate (and drift from) the frontend model. Writes are
 //! atomic (temp file + rename) so a crash mid-write can't corrupt the saved workspace.
+//!
+//! The `AppHandle` wrappers only resolve the path; all real logic lives in the
+//! path-based helpers below so it is testable without a Tauri runtime.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
@@ -23,11 +26,25 @@ fn state_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Load the saved workspace blob, or `None` on first run.
 pub fn load(app: &AppHandle) -> Result<Option<Value>, String> {
-    let path = state_path(app)?;
+    load_from(&state_path(app)?)
+}
+
+/// Persist the workspace blob atomically.
+pub fn save(app: &AppHandle, state: &Value) -> Result<(), String> {
+    save_to(&state_path(app)?, state)
+}
+
+/// Copy the current state file to `state.<label>.bak.json`. Used before a
+/// version-mismatch reset so old data is never silently destroyed.
+pub fn backup(app: &AppHandle, label: &str) -> Result<(), String> {
+    backup_at(&state_path(app)?, label)
+}
+
+fn load_from(path: &Path) -> Result<Option<Value>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    let raw = fs::read_to_string(&path).map_err(|e| {
+    let raw = fs::read_to_string(path).map_err(|e| {
         tracing::warn!(error = %e, "read state failed");
         format!("read state failed: {e}")
     })?;
@@ -41,31 +58,7 @@ pub fn load(app: &AppHandle) -> Result<Option<Value>, String> {
     Ok(Some(value))
 }
 
-/// Copy the current state file to `state.<label>.bak.json`. Used before a
-/// version-mismatch reset so old data is never silently destroyed. The label is
-/// sanitized here (boundary validation): alphanumerics, `-` and `_` only.
-pub fn backup(app: &AppHandle, label: &str) -> Result<(), String> {
-    let path = state_path(app)?;
-    if !path.exists() {
-        return Ok(());
-    }
-    let safe: String = label
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .take(32)
-        .collect();
-    let name = if safe.is_empty() { "backup".to_string() } else { safe };
-    let dest = path.with_file_name(format!("state.{name}.bak.json"));
-    fs::copy(&path, &dest).map_err(|e| {
-        tracing::warn!(error = %e, "backup state failed");
-        format!("backup state failed: {e}")
-    })?;
-    Ok(())
-}
-
-/// Persist the workspace blob atomically.
-pub fn save(app: &AppHandle, state: &Value) -> Result<(), String> {
-    let path = state_path(app)?;
+fn save_to(path: &Path, state: &Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create config dir failed: {e}"))?;
     }
@@ -76,9 +69,104 @@ pub fn save(app: &AppHandle, state: &Value) -> Result<(), String> {
         tracing::warn!(error = %e, "write temp state failed");
         format!("write state failed: {e}")
     })?;
-    fs::rename(&tmp, &path).map_err(|e| {
+    fs::rename(&tmp, path).map_err(|e| {
         tracing::warn!(error = %e, "rename state failed");
         format!("save state failed: {e}")
     })?;
     Ok(())
+}
+
+/// Boundary validation lives here: the label comes from the WebView, so it is reduced
+/// to alphanumerics, `-` and `_` before touching a filename.
+fn backup_at(path: &Path, label: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let safe: String = label
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .take(32)
+        .collect();
+    let name = if safe.is_empty() { "backup".to_string() } else { safe };
+    let dest = path.with_file_name(format!("state.{name}.bak.json"));
+    fs::copy(path, &dest).map_err(|e| {
+        tracing::warn!(error = %e, "backup state failed");
+        format!("backup state failed: {e}")
+    })?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Fresh per-test directory under the OS temp dir (no tempfile dependency).
+    fn test_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "warsha-session-test-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create test dir");
+        dir
+    }
+
+    #[test]
+    fn round_trip_preserves_the_blob() {
+        let dir = test_dir("roundtrip");
+        let path = dir.join(STATE_FILE);
+        let blob = json!({"version": 3, "workspaces": {"a": [1, 2, 3]}, "غرفة": "عربي"});
+        save_to(&path, &blob).expect("save");
+        let loaded = load_from(&path).expect("load").expect("some");
+        assert_eq!(loaded, blob);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_and_empty_files_are_first_run() {
+        let dir = test_dir("empty");
+        let path = dir.join(STATE_FILE);
+        assert_eq!(load_from(&path).expect("missing -> ok"), None);
+        fs::write(&path, "   \n").expect("write");
+        assert_eq!(load_from(&path).expect("empty -> ok"), None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn corrupt_json_errors_instead_of_panicking() {
+        let dir = test_dir("corrupt");
+        let path = dir.join(STATE_FILE);
+        fs::write(&path, "{not json").expect("write");
+        let err = load_from(&path).unwrap_err();
+        assert!(err.contains("parse state failed"), "got: {err}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_overwrites_atomically_and_leaves_no_tmp() {
+        let dir = test_dir("overwrite");
+        let path = dir.join(STATE_FILE);
+        save_to(&path, &json!({"v": 1})).expect("first");
+        save_to(&path, &json!({"v": 2})).expect("second");
+        assert_eq!(load_from(&path).unwrap().unwrap()["v"], 2);
+        assert!(!path.with_extension("json.tmp").exists(), "tmp must be renamed away");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn backup_copies_and_sanitizes_the_label() {
+        let dir = test_dir("backup");
+        let path = dir.join(STATE_FILE);
+        save_to(&path, &json!({"v": 2})).expect("save");
+        backup_at(&path, "v2").expect("backup");
+        assert!(dir.join("state.v2.bak.json").exists());
+        // Hostile label collapses to safe characters only.
+        backup_at(&path, "../..\\evil name!").expect("backup hostile");
+        assert!(dir.join("state.evilname.bak.json").exists());
+        // No state file -> silently ok.
+        let missing = dir.join("nope.json");
+        backup_at(&missing, "x").expect("missing ok");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

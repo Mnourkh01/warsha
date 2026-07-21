@@ -63,7 +63,11 @@ export const useWorkspaces = create<WsState>((set, get) => {
     activeSessionId: null,
 
     addWorkspace: (name) => {
-      const ws = makeWs(name ?? `Workspace ${get().workspaces.length + 1}`);
+      // Next free number, not count+1: after deletions "Workspace 2" may still exist.
+      const taken = new Set(get().workspaces.map((w) => w.name));
+      let n = get().workspaces.length + 1;
+      while (taken.has(`Workspace ${n}`)) n += 1;
+      const ws = makeWs(name ?? `Workspace ${n}`);
       set((s) => ({
         workspaces: [...s.workspaces, ws],
         activeWorkspaceId: ws.id,

@@ -25,8 +25,6 @@ export interface TerminalOpts {
   foreground?: string;
   /** Render terminal text at a heavier weight. */
   bold?: boolean;
-  /** A command auto-run once after the shell starts (e.g. launch an AI CLI). */
-  initCommand?: string;
 }
 
 // Browsers cap live WebGL contexts (~16/process). Stay well under with a soft budget;
@@ -47,7 +45,9 @@ class TerminalController {
   private spawnFailed = false;
   private disposed = false;
   private ro?: ResizeObserver;
-  private onExitCb?: () => void;
+  private lastCols = 0;
+  private lastRows = 0;
+  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(sessionId: string, opts: TerminalOpts) {
     this.sessionId = sessionId;
@@ -147,14 +147,15 @@ class TerminalController {
     this.term.focus();
   }
 
-  setExitHandler(cb: () => void): void {
-    this.onExitCb = cb;
+  /** Re-measure the grid (font metrics changed, e.g. a devicePixelRatio switch). */
+  refit(): void {
+    if (this.opened && !this.disposed) this.fitAndMaybeSpawn();
   }
 
   /** Called when the backend reports the process exited. */
-  notifyExit(): void {
-    this.term.write("\r\n\x1b[38;5;244m[process exited]\x1b[0m\r\n");
-    this.onExitCb?.();
+  notifyExit(code?: number): void {
+    const suffix = code ? ` (code ${code})` : "";
+    this.term.write(`\r\n\x1b[38;5;244m[process exited${suffix}]\x1b[0m\r\n`);
   }
 
   applySettings(opts: Partial<TerminalOpts>): void {
@@ -206,14 +207,30 @@ class TerminalController {
 
   private fitAndMaybeSpawn(): void {
     this.fit();
-    if (this.term.cols > 0 && this.term.rows > 0) {
-      if (!this.spawned) {
-        this.spawn(this.term.cols, this.term.rows);
-      } else if (!this.spawnFailed && !this.disposed) {
-        // A failed/disposed session must not spam resize IPC at a dead id.
-        void ptyResize(this.sessionId, this.term.cols, this.term.rows).catch(() => {});
-      }
+    const { cols, rows } = this.term;
+    if (cols <= 0 || rows <= 0) return;
+    if (!this.spawned) {
+      this.lastCols = cols;
+      this.lastRows = rows;
+      this.spawn(cols, rows);
+      return;
     }
+    if (this.spawnFailed || this.disposed) return;
+    // Only tell the PTY when the GRID actually changed, and coalesce the storm a
+    // separator drag produces (ResizeObserver fires per frame; each ConPTY resize
+    // forces alt-screen TUIs to fully repaint).
+    if (cols === this.lastCols && rows === this.lastRows) return;
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(() => {
+      this.resizeTimer = null;
+      if (this.disposed) return;
+      const c = this.term.cols;
+      const r = this.term.rows;
+      if (c === this.lastCols && r === this.lastRows) return;
+      this.lastCols = c;
+      this.lastRows = r;
+      void ptyResize(this.sessionId, c, r).catch(() => {});
+    }, 60);
   }
 
   private spawn(cols: number, rows: number): void {
@@ -226,13 +243,6 @@ class TerminalController {
         if (!this.disposed) this.term.write(bytes);
       },
     )
-      .then(() => {
-        // Auto-run a launch command (e.g. `claude`) once the shell has its first prompt.
-        const cmd = this.opts.initCommand;
-        if (cmd) {
-          setTimeout(() => void ptyWrite(this.sessionId, `${cmd}\r`).catch(() => {}), 600);
-        }
-      })
       .catch((err) => {
         // Spawn failed: mark it so resize traffic stops, and correct the status dot
         // (newSession optimistically set it to "running").
@@ -249,6 +259,7 @@ class TerminalController {
   dispose(): Promise<void> {
     this.disposed = true;
     this.ro?.disconnect();
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.releaseWebgl();
     const killed = ptyKill(this.sessionId).catch(() => {});
     this.term.dispose();
@@ -288,5 +299,23 @@ export function disposeTerminal(sessionId: string): Promise<void> {
 export function applySettingsToAll(opts: Partial<TerminalOpts>): void {
   for (const c of registry.values()) c.applySettings(opts);
 }
+
+// devicePixelRatio switch (window dragged to a monitor with different scaling): xterm's
+// WebGL addon rebuilds its glyph atlas itself, but cell CSS size can shift by rounding
+// while the element size stays constant, so ResizeObserver never fires - re-fit all
+// terminals explicitly. The matchMedia must be re-armed after every change because the
+// query string embeds the ratio it was created at.
+function armDprListener(): void {
+  const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  mq.addEventListener(
+    "change",
+    () => {
+      for (const c of registry.values()) c.refit();
+      armDprListener();
+    },
+    { once: true },
+  );
+}
+armDprListener();
 
 export type { TerminalController };

@@ -26,6 +26,8 @@ async function boot() {
   try {
     await Promise.allSettled([
       document.fonts.load('14px "IBM Plex Mono"'),
+      // 600 too: bold-mode terminals measure with the heavier weight at first open.
+      document.fonts.load('600 14px "IBM Plex Mono"'),
       document.fonts.load('14px "IBM Plex Sans Arabic"'),
     ]);
     await document.fonts.ready;

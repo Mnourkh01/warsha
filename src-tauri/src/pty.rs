@@ -85,12 +85,13 @@ impl PtyManager {
     /// Spawn a ConPTY, register it under `opts.id`, then start its reader, writer and
     /// waiter threads. Registration happens BEFORE the waiter starts (see module docs).
     ///
-    /// `on_exit` fires with the session id when the child exits on its own (not when the
-    /// user killed it). Taking a closure instead of an `AppHandle` keeps this module free
-    /// of the Tauri event system, so tests drive it without any mock runtime.
+    /// `on_exit` fires with the session id and exit code when the child exits on its own
+    /// (not when the user killed it). Taking a closure instead of an `AppHandle` keeps
+    /// this module free of the Tauri event system, so tests drive it without any mock
+    /// runtime.
     pub fn spawn(
         &self,
-        on_exit: impl FnOnce(String) + Send + 'static,
+        on_exit: impl FnOnce(String, u32) + Send + 'static,
         opts: SpawnOpts,
         on_data: Channel<InvokeResponseBody>,
     ) -> Result<(), String> {
@@ -232,7 +233,7 @@ impl PtyManager {
         if let Err(e) = std::thread::Builder::new()
             .name(format!("pty-wait-{id}"))
             .spawn(move || {
-                let _ = child.wait();
+                let code = child.wait().map(|s| s.exit_code()).unwrap_or(0);
                 let owned = {
                     let mut sessions = sessions_ref.lock();
                     match sessions.get(&wait_id) {
@@ -246,8 +247,8 @@ impl PtyManager {
                     }
                 };
                 if owned {
-                    tracing::info!(session = %wait_id, "pty exited");
-                    on_exit(wait_id);
+                    tracing::info!(session = %wait_id, code, "pty exited");
+                    on_exit(wait_id, code);
                 }
             })
         {
@@ -498,7 +499,7 @@ mod tests {
         let sink = exits.clone();
         manager
             .spawn(
-                move |id| sink.lock().push(id),
+                move |id, _code| sink.lock().push(id),
                 spawn_opts("fast1", fast_exit_shell()),
                 test_channel(),
             )
@@ -515,7 +516,7 @@ mod tests {
         assert_eq!(exits.lock().as_slice(), ["fast1"], "exit callback must fire once");
 
         manager
-            .spawn(|_| {}, spawn_opts("fast1", fast_exit_shell()), test_channel())
+            .spawn(|_, _| {}, spawn_opts("fast1", fast_exit_shell()), test_channel())
             .expect("respawn with the same id after fast exit");
         assert!(
             wait_until(Duration::from_secs(6), || {
@@ -537,7 +538,7 @@ mod tests {
         let sink = exits.clone();
         manager
             .spawn(
-                move |id| sink.lock().push(id),
+                move |id, _code| sink.lock().push(id),
                 spawn_opts("re1", ShellSpec::Cmd),
                 test_channel(),
             )
@@ -546,7 +547,7 @@ mod tests {
 
         manager.kill("re1").expect("kill");
         manager
-            .spawn(|_| {}, spawn_opts("re1", ShellSpec::Cmd), test_channel())
+            .spawn(|_, _| {}, spawn_opts("re1", ShellSpec::Cmd), test_channel())
             .expect("respawn after kill");
 
         // Give the stale waiter ample time to fire; the new session must survive it.
@@ -573,7 +574,7 @@ mod tests {
         assert!(manager.kill("ghost").is_ok());
 
         manager
-            .spawn(|_| {}, spawn_opts("w1", ShellSpec::Cmd), test_channel())
+            .spawn(|_, _| {}, spawn_opts("w1", ShellSpec::Cmd), test_channel())
             .expect("spawn");
         manager.kill("w1").expect("kill");
         let err = manager.write("w1", b"echo hi\r").unwrap_err();
@@ -585,11 +586,11 @@ mod tests {
     fn spawn_rejects_bad_ids() {
         let manager = PtyManager::default();
         assert!(manager
-            .spawn(|_| {}, spawn_opts("", fast_exit_shell()), test_channel())
+            .spawn(|_, _| {}, spawn_opts("", fast_exit_shell()), test_channel())
             .is_err());
         let long_id = "x".repeat(200);
         assert!(manager
-            .spawn(|_| {}, spawn_opts(&long_id, fast_exit_shell()), test_channel())
+            .spawn(|_, _| {}, spawn_opts(&long_id, fast_exit_shell()), test_channel())
             .is_err());
     }
 

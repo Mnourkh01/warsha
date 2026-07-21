@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import { useSettings, resolveTerminalTheme, type TerminalTheme } from "../../store/settings";
 import { useUI } from "../../store/ui";
@@ -5,6 +6,7 @@ import { applySettingsToAll } from "../terminal/controller";
 import { terminalThemeFor } from "../terminal/theme";
 import { pickFolder } from "../../lib/ipc";
 import { resolveTheme } from "../../lib/theme";
+import { DialogTrap } from "../../lib/dialog-trap";
 import type { ShellKind, ThemeMode } from "../../lib/types";
 
 const THEMES: ThemeMode[] = ["dark", "light", "system"];
@@ -19,6 +21,8 @@ export function SettingsDialog() {
   const open = useUI((s) => s.settingsOpen);
   const setSettings = useUI((s) => s.setSettings);
   const s = useSettings();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [pickError, setPickError] = useState<string | null>(null);
 
   if (!open) return null;
 
@@ -53,11 +57,17 @@ export function SettingsDialog() {
         if (e.target === e.currentTarget) setSettings(false);
       }}
     >
-      <div className="dialog" role="dialog" aria-label="Settings">
+      <div className="dialog" role="dialog" aria-modal="true" aria-label="Settings" ref={boxRef}>
+        <DialogTrap containerRef={boxRef} />
         <div className="dialog-header">
           Settings
           <span style={{ flex: 1 }} />
-          <button className="icon-btn" title="Close" onClick={() => setSettings(false)}>
+          <button
+            className="icon-btn"
+            title="Close"
+            aria-label="Close settings"
+            onClick={() => setSettings(false)}
+          >
             <X size={16} />
           </button>
         </div>
@@ -98,11 +108,21 @@ export function SettingsDialog() {
             <div className="field-row">
               <span className="field-label">Terminal font size</span>
               <div className="stepper">
-                <button className="icon-btn" onClick={() => setFont(s.fontSize - 1)}>
+                <button
+                  className="icon-btn"
+                  title="Smaller"
+                  aria-label="Decrease font size"
+                  onClick={() => setFont(s.fontSize - 1)}
+                >
                   <Minus size={14} />
                 </button>
-                <span className="val">{s.fontSize}</span>
-                <button className="icon-btn" onClick={() => setFont(s.fontSize + 1)}>
+                <span className="val" aria-live="polite">{s.fontSize}</span>
+                <button
+                  className="icon-btn"
+                  title="Larger"
+                  aria-label="Increase font size"
+                  onClick={() => setFont(s.fontSize + 1)}
+                >
                   <Plus size={14} />
                 </button>
               </div>
@@ -170,10 +190,13 @@ export function SettingsDialog() {
               <button
                 className="btn-ghost"
                 onClick={async () => {
-                  const dir = await pickFolder("Choose your default project folder").catch(
-                    () => null,
-                  );
-                  if (dir) s.setDefaultCwd(dir);
+                  setPickError(null);
+                  try {
+                    const dir = await pickFolder("Choose your default project folder");
+                    if (dir) s.setDefaultCwd(dir);
+                  } catch (e) {
+                    setPickError(`Could not open the folder picker. (${String(e)})`);
+                  }
                 }}
               >
                 Browse
@@ -184,6 +207,7 @@ export function SettingsDialog() {
                 </button>
               ) : null}
             </div>
+            {pickError && <div className="picker-error">{pickError}</div>}
           </div>
         </div>
       </div>

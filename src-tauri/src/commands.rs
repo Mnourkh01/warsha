@@ -11,6 +11,7 @@ use crate::session;
 #[derive(Debug, Clone, Serialize)]
 struct ExitPayload {
     id: String,
+    code: u32,
 }
 
 #[tauri::command]
@@ -21,8 +22,8 @@ pub fn pty_spawn(
     on_data: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
     manager.spawn(
-        move |id| {
-            if let Err(e) = app.emit("pty://exit", ExitPayload { id: id.clone() }) {
+        move |id, code| {
+            if let Err(e) = app.emit("pty://exit", ExitPayload { id: id.clone(), code }) {
                 tracing::debug!(session = %id, error = %e, "emit exit failed");
             }
         },
