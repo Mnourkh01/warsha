@@ -13,6 +13,7 @@ import { useRuntime } from "./store/runtime";
 import { applyTheme, resolveTheme } from "./lib/theme";
 import { applySettingsToAll, getTerminal } from "./features/terminal/controller";
 import { noteExit } from "./features/terminal/attention";
+import { useStrings } from "./lib/i18n";
 import { onPtyExit } from "./lib/ipc";
 
 // Browser accelerators WebView2 would otherwise hijack from app chrome:
@@ -25,7 +26,9 @@ const ZOOM_CODES = new Set(["Equal", "Minus", "Digit0", "NumpadAdd", "NumpadSubt
 export default function App() {
   const theme = useSettings((s) => s.theme);
   const terminalTheme = useSettings((s) => s.terminalTheme);
+  const locale = useSettings((s) => s.locale);
   const sidebarOpen = useUI((s) => s.sidebarOpen);
+  const t = useStrings();
 
   // Keep <html data-theme> synced with the app theme, and terminals synced with the
   // (independent) terminal color scheme.
@@ -33,6 +36,13 @@ export default function App() {
     applyTheme(theme);
     applySettingsToAll({ theme: resolveTerminalTheme(terminalTheme, resolveTheme(theme)) });
   }, [theme, terminalTheme]);
+
+  // App chrome direction follows the locale; the terminal grid itself stays LTR (a CSS
+  // rule on .term-host, xterm cannot render RTL).
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
+  }, [locale]);
 
   // Follow the OS theme while in "system" mode.
   useEffect(() => {
@@ -158,8 +168,8 @@ export default function App() {
       ) : (
         <button
           className="sidebar-show"
-          title="Show sidebar (Ctrl+Shift+B)"
-          aria-label="Show sidebar"
+          title={t.showSidebar}
+          aria-label={t.showSidebarAria}
           onClick={() => useUI.getState().setSidebar(true)}
         >
           <PanelLeftOpen size={16} />

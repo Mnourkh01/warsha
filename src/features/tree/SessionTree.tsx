@@ -28,6 +28,7 @@ import {
   switchWorkspace,
 } from "../../actions";
 import { SessionIcon, WarshaMark } from "../icons";
+import { useStrings } from "../../lib/i18n";
 
 const DND = "text/warsha-session";
 
@@ -41,6 +42,7 @@ export function SessionTree() {
   const setNewSession = useUI((s) => s.setNewSession);
   const setSidebar = useUI((s) => s.setSidebar);
   const resolved = resolveTheme(theme);
+  const t = useStrings();
 
   return (
     <aside className="sidebar">
@@ -54,40 +56,40 @@ export function SessionTree() {
         <span className="spacer" />
         <button
           className="icon-btn"
-          title="New workspace"
-          aria-label="New workspace"
+          title={t.newWorkspace}
+          aria-label={t.newWorkspace}
           onClick={() => newWorkspace()}
         >
           <FolderPlus size={16} />
         </button>
         <button
           className="icon-btn"
-          title="New session"
-          aria-label="New session"
+          title={t.newSession}
+          aria-label={t.newSession}
           onClick={() => setNewSession(true)}
         >
           <Plus size={16} />
         </button>
         <button
           className="icon-btn"
-          title="Toggle theme"
-          aria-label="Toggle light or dark theme"
+          title={t.toggleTheme}
+          aria-label={t.toggleThemeAria}
           onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
         >
           {resolved === "dark" ? <Sun size={16} /> : <Moon size={16} />}
         </button>
         <button
           className="icon-btn"
-          title="Settings"
-          aria-label="Settings"
+          title={t.settings}
+          aria-label={t.settings}
           onClick={() => setSettings(true)}
         >
           <Settings size={16} />
         </button>
         <button
           className="icon-btn"
-          title="Hide sidebar (Ctrl+Shift+B)"
-          aria-label="Hide sidebar"
+          title={t.hideSidebar}
+          aria-label={t.hideSidebarAria}
           onClick={() => setSidebar(false)}
         >
           <PanelLeftClose size={16} />
@@ -104,10 +106,7 @@ export function SessionTree() {
           />
         ))}
         {workspaces.every((w) => w.sessionIds.length === 0) && (
-          <div className="tree-empty">
-            No sessions yet. Press the + button above, or Ctrl K, to open your first
-            terminal.
-          </div>
+          <div className="tree-empty">{t.treeEmpty}</div>
         )}
       </div>
     </aside>
@@ -129,6 +128,7 @@ function WorkspaceItem({
   const attentionCount = useRuntime((s) =>
     ws.sessionIds.reduce((n, id) => n + (s.attention[id] ? 1 : 0), 0),
   );
+  const t = useStrings();
   const [collapsed, setCollapsed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(ws.name);
@@ -176,7 +176,7 @@ function WorkspaceItem({
           role="button"
           tabIndex={0}
           aria-expanded={!collapsed}
-          aria-label={collapsed ? "Expand workspace" : "Collapse workspace"}
+          aria-label={collapsed ? t.expandWorkspace : t.collapseWorkspace}
           onClick={(e) => {
             e.stopPropagation();
             setCollapsed((c) => !c);
@@ -198,7 +198,7 @@ function WorkspaceItem({
           <input
             className="rename-input"
             dir="auto"
-            aria-label="Workspace name"
+            aria-label={t.workspaceName}
             value={draft}
             autoFocus
             onChange={(e) => setDraft(e.target.value)}
@@ -217,8 +217,8 @@ function WorkspaceItem({
           <span
             className="ws-attention"
             role="img"
-            aria-label={`${attentionCount} sessions need attention`}
-            title={`${attentionCount} sessions need attention`}
+            aria-label={t.sessionsNeedAttention(attentionCount)}
+            title={t.sessionsNeedAttention(attentionCount)}
           >
             {attentionCount}
           </span>
@@ -228,8 +228,8 @@ function WorkspaceItem({
           <span className="row-actions" onClick={(e) => e.stopPropagation()}>
             <button
               className="icon-btn sm"
-              title={full ? `Workspace full (${MAX_PER_WS})` : "New session here"}
-              aria-label={full ? "Workspace full" : `New session in ${ws.name}`}
+              title={full ? t.workspaceFull(MAX_PER_WS) : t.newSessionHere}
+              aria-label={full ? t.workspaceFull(MAX_PER_WS) : t.newSessionIn(ws.name)}
               disabled={full}
               onClick={() => {
                 switchWorkspace(ws.id);
@@ -240,8 +240,8 @@ function WorkspaceItem({
             </button>
             <button
               className="icon-btn sm"
-              title="Rename"
-              aria-label={`Rename workspace ${ws.name}`}
+              title={t.rename}
+              aria-label={t.renameWorkspaceNamed(ws.name)}
               onClick={() => {
                 setDraft(ws.name);
                 setEditing(true);
@@ -251,14 +251,14 @@ function WorkspaceItem({
             </button>
             <button
               className="icon-btn sm"
-              title="Delete workspace"
-              aria-label={`Delete workspace ${ws.name}`}
+              title={t.deleteWorkspace}
+              aria-label={t.deleteWorkspaceNamed(ws.name)}
               onClick={async () => {
                 // One hover-click next to Rename must not silently kill live shells.
                 if (ws.sessionIds.length > 0) {
                   const ok = await confirmDialog(
-                    `Delete "${ws.name}" and close its ${ws.sessionIds.length} session(s)?`,
-                    "Delete workspace",
+                    t.deleteWorkspaceConfirm(ws.name, ws.sessionIds.length),
+                    t.deleteWorkspace,
                   ).catch(() => false);
                   if (!ok) return;
                 }
@@ -285,6 +285,7 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
   const renameSession = useWorkspaces((s) => s.renameSession);
   const status = useRuntime((s) => s.status[id]);
   const attention = useRuntime((s) => Boolean(s.attention[id]));
+  const t = useStrings();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -341,14 +342,16 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
       <span
         className={`status-dot ${status ?? "idle"}`}
         role="img"
-        aria-label={status === "running" ? "Running" : status === "exited" ? "Exited" : "Idle"}
+        aria-label={
+          status === "running" ? t.statusRunning : status === "exited" ? t.statusExited : t.statusIdle
+        }
       />
       {editing ? (
         <input
           ref={inputRef}
           className="rename-input"
           dir="auto"
-          aria-label="Session name"
+          aria-label={t.sessionName}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onClick={(e) => e.stopPropagation()}
@@ -366,24 +369,24 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
         <span
           className="attention-dot"
           role="img"
-          aria-label="Needs attention"
-          title="Finished or waiting for input"
+          aria-label={t.needsAttention}
+          title={t.attentionHint}
         />
       )}
       {!editing && (
         <span className="row-actions" onClick={(e) => e.stopPropagation()}>
           <button
             className="icon-btn sm"
-            title="Restart"
-            aria-label={`Restart ${session.name}`}
+            title={t.restart}
+            aria-label={t.restartNamed(session.name)}
             onClick={() => void restartSession(id)}
           >
             <RotateCcw size={13} />
           </button>
           <button
             className="icon-btn sm"
-            title="Rename"
-            aria-label={`Rename ${session.name}`}
+            title={t.rename}
+            aria-label={t.renameNamed(session.name)}
             onClick={() => {
               setDraft(session.name);
               setEditing(true);
@@ -393,8 +396,8 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
           </button>
           <button
             className="icon-btn sm"
-            title="Close session"
-            aria-label={`Close ${session.name}`}
+            title={t.closeSession}
+            aria-label={t.closeNamed(session.name)}
             onClick={() => closeSession(id)}
           >
             <X size={13} />

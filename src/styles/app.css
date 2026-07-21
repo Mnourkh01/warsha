@@ -58,6 +58,12 @@
 .brand .brand-mark {
   color: var(--accent);
 }
+
+/* The terminal grid is always LTR; Arabic app chrome must not flip it (xterm cannot
+   render RTL, and shells/CLIs assume LTR). */
+.term-host {
+  direction: ltr;
+}
 .spacer {
   flex: 1;
 }

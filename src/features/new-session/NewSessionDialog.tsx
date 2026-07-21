@@ -8,10 +8,10 @@ import { pickFolder, whichProgram } from "../../lib/ipc";
 import { SESSION_TYPES, type SessionType } from "../../lib/sessionTypes";
 import { DialogTrap } from "../../lib/dialog-trap";
 import { SessionIcon } from "../icons";
-
-const FULL_MSG = `This workspace already has ${MAX_PER_WS} sessions. Make a new workspace or close one.`;
+import { useStrings } from "../../lib/i18n";
 
 export function NewSessionDialog() {
+  const t = useStrings();
   const open = useUI((s) => s.newSessionOpen);
   const setNewSession = useUI((s) => s.setNewSession);
   const defaultCwd = useSettings((s) => s.defaultCwd);
@@ -37,24 +37,27 @@ export function NewSessionDialog() {
     setNewSession(false);
   };
 
-  const chooseType = async (t: SessionType) => {
+  const chooseType = async (type: SessionType) => {
     setMissing(null);
     setError(null);
     setBusy(true);
     try {
-      if (t.probe) {
-        const found = await whichProgram(t.probe);
+      if (type.probe) {
+        const found = await whichProgram(type.probe);
         if (!found) {
-          setMissing({ label: t.label, install: t.install ?? `Program not found: ${t.probe}` });
+          setMissing({
+            label: type.label,
+            install: type.install ?? `Program not found: ${type.probe}`,
+          });
           setBusy(false);
           return;
         }
       }
-      setSelected(t);
+      setSelected(type);
       setBusy(false);
     } catch (e) {
       console.warn("install probe failed", e);
-      setError(`Could not check whether ${t.label} is installed. Try again.`);
+      setError(t.checkFailed(type.label));
       setBusy(false);
     }
   };
@@ -62,14 +65,14 @@ export function NewSessionDialog() {
   const start = async (folder: string | null) => {
     if (!selected) return;
     if (activeFull) {
-      setError(FULL_MSG);
+      setError(t.workspaceFullMsg(MAX_PER_WS));
       return;
     }
     const cwd = folder ?? undefined;
     const base = cwd ? cwd.split(/[\\/]/).filter(Boolean).pop() || cwd : selected.label;
     const id = newSession({ shell: selected.shell, name: `${selected.label} · ${base}`, cwd, typeId: selected.id });
     if (!id) {
-      setError(FULL_MSG);
+      setError(t.workspaceFullMsg(MAX_PER_WS));
       return;
     }
     close();
@@ -78,13 +81,13 @@ export function NewSessionDialog() {
   const browse = async () => {
     setBusy(true);
     try {
-      const folder = await pickFolder(`Choose a folder for ${selected?.label}`);
+      const folder = await pickFolder(t.chooseFolderFor(selected?.label ?? ""));
       setBusy(false);
       if (folder) void start(folder);
     } catch (e) {
       console.warn("folder picker failed", e);
       setBusy(false);
-      setError("Could not open the folder picker. Try again.");
+      setError(t.pickerFailed);
     }
   };
 
@@ -97,10 +100,10 @@ export function NewSessionDialog() {
   const shells = SESSION_TYPES.filter((t) => t.group === "shell");
   const ais = SESSION_TYPES.filter((t) => t.group === "ai");
 
-  const renderCard = (t: SessionType) => (
-    <button key={t.id} className="type-card" disabled={busy} onClick={() => chooseType(t)}>
-      <SessionIcon typeId={t.id} size={22} />
-      <span className="type-label">{t.label}</span>
+  const renderCard = (type: SessionType) => (
+    <button key={type.id} className="type-card" disabled={busy} onClick={() => chooseType(type)}>
+      <SessionIcon typeId={type.id} size={22} />
+      <span className="type-label">{type.label}</span>
     </button>
   );
 
@@ -111,42 +114,42 @@ export function NewSessionDialog() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="picker" role="dialog" aria-modal="true" aria-label="New session" ref={boxRef}>
+      <div className="picker" role="dialog" aria-modal="true" aria-label={t.newSession} ref={boxRef}>
         <DialogTrap containerRef={boxRef} />
         <div className="picker-head">
           {selected ? (
             <button
               className="icon-btn"
-              title="Back"
-              aria-label="Back to session types"
+              title={t.back}
+              aria-label={t.backToTypes}
               onClick={() => setSelected(null)}
             >
               <ArrowLeft size={16} />
             </button>
           ) : null}
-          {selected ? `Where should ${selected.label} start?` : "New session"}
+          {selected ? t.whereStart(selected.label) : t.newSession}
           <span style={{ flex: 1 }} />
           <span className="picker-hint">
-            {selected ? "pick a folder" : "pick a type, then a folder"}
+            {selected ? t.pickFolderHint : t.pickTypeHint}
           </span>
         </div>
 
         <div className="picker-body" aria-busy={busy}>
           {!selected ? (
             <>
-              <div className="picker-group-label">Shells</div>
+              <div className="picker-group-label">{t.shellsGroup}</div>
               <div className="picker-grid">{shells.map(renderCard)}</div>
-              <div className="picker-group-label">AI agents</div>
+              <div className="picker-group-label">{t.aiGroup}</div>
               <div className="picker-grid">{ais.map(renderCard)}</div>
               {missing && (
                 <div className="install-note">
-                  <div className="install-title">{missing.label} is not installed. Run this to add it:</div>
+                  <div className="install-title">{t.notInstalled(missing.label)}</div>
                   <div className="install-row">
                     <code>{missing.install}</code>
                     <button
                       className="icon-btn"
-                      title="Copy"
-                      aria-label="Copy install command"
+                      title={t.copy}
+                      aria-label={t.copyInstall}
                       onClick={() => copy(missing.install)}
                     >
                       {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -161,18 +164,18 @@ export function NewSessionDialog() {
               {defaultCwd ? (
                 <button className="folder-btn" disabled={busy} onClick={() => void start(defaultCwd)}>
                   <Folder size={16} />
-                  <span className="folder-btn-main">Default folder</span>
+                  <span className="folder-btn-main">{t.defaultFolderBtn}</span>
                   <span className="folder-btn-path bidi-auto">{defaultCwd}</span>
                 </button>
               ) : null}
               <button className="folder-btn" disabled={busy} onClick={() => void browse()}>
                 <FolderOpen size={16} />
-                <span className="folder-btn-main">Choose a folder...</span>
-                <span className="folder-btn-path">opens a folder browser</span>
+                <span className="folder-btn-main">{t.chooseFolderBtn}</span>
+                <span className="folder-btn-path">{t.opensFolderBrowser}</span>
               </button>
               <button className="folder-btn" disabled={busy} onClick={() => void start(null)}>
                 <span className="folder-btn-main" style={{ marginInlineStart: 26 }}>
-                  No folder (start in home)
+                  {t.noFolderBtn}
                 </span>
               </button>
               {error && <div className="picker-error">{error}</div>}
@@ -182,7 +185,7 @@ export function NewSessionDialog() {
 
         <div className="picker-foot">
           <FolderOpen size={14} />
-          <span>Sessions open in the active workspace (up to {MAX_PER_WS}).</span>
+          <span>{t.sessionsOpenNote(MAX_PER_WS)}</span>
         </div>
       </div>
     </div>

@@ -6,12 +6,7 @@ import { TerminalView } from "../terminal/TerminalView";
 import { FindBar } from "../terminal/FindBar";
 import { closeSession, openSession } from "../../actions";
 import { SessionIcon } from "../icons";
-
-const STATUS_LABELS: Record<string, string> = {
-  running: "Running",
-  exited: "Exited",
-  idle: "Idle",
-};
+import { useStrings } from "../../lib/i18n";
 
 export function Pane({ sessionId }: { sessionId: string }) {
   const session = useWorkspaces((s) => s.sessions[sessionId]);
@@ -20,10 +15,12 @@ export function Pane({ sessionId }: { sessionId: string }) {
   const attention = useRuntime((s) => Boolean(s.attention[sessionId]));
   const maximized = useUI((s) => s.maximizedSessionId === sessionId);
   const findOpen = useUI((s) => s.findOpen && active);
+  const t = useStrings();
 
   if (!session) return null;
 
-  const statusLabel = STATUS_LABELS[status ?? "idle"];
+  const statusLabel =
+    status === "running" ? t.statusRunning : status === "exited" ? t.statusExited : t.statusIdle;
 
   return (
     <div className={`pane${active ? " active" : ""}`} onMouseDown={() => openSession(sessionId)}>
@@ -40,15 +37,15 @@ export function Pane({ sessionId }: { sessionId: string }) {
           <span
             className="attention-dot"
             role="img"
-            aria-label="Needs attention"
-            title="Finished or waiting for input"
+            aria-label={t.needsAttention}
+            title={t.attentionHint}
           />
         )}
         <span className="pane-actions">
           <button
             className="icon-btn sm"
-            title={maximized ? "Restore pane (Ctrl+Shift+M)" : "Maximize pane (Ctrl+Shift+M)"}
-            aria-label={maximized ? `Restore ${session.name}` : `Maximize ${session.name}`}
+            title={maximized ? t.restorePane : t.maximizePane}
+            aria-label={maximized ? t.restoreNamed(session.name) : t.maximizeNamed(session.name)}
             onClick={(e) => {
               e.stopPropagation();
               useUI.getState().toggleMaximized(sessionId);
@@ -58,8 +55,8 @@ export function Pane({ sessionId }: { sessionId: string }) {
           </button>
           <button
             className="icon-btn sm"
-            title="Close session"
-            aria-label={`Close ${session.name}`}
+            title={t.closeSession}
+            aria-label={t.closeNamed(session.name)}
             onClick={(e) => {
               e.stopPropagation();
               closeSession(sessionId);

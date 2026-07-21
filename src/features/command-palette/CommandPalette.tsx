@@ -28,6 +28,7 @@ import {
 } from "../../actions";
 import { DialogTrap } from "../../lib/dialog-trap";
 import { SessionIcon } from "../icons";
+import { useStrings } from "../../lib/i18n";
 
 interface Command {
   id: string;
@@ -46,6 +47,7 @@ export function CommandPalette() {
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
   const setSettings = useUI((s) => s.setSettings);
+  const t = useStrings();
 
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
@@ -56,31 +58,31 @@ export function CommandPalette() {
     const base: Command[] = [
       {
         id: "new-picker",
-        label: "New session in a folder...",
+        label: t.cmdNewPicker,
         icon: <SessionIcon typeId="powershell" size={16} />,
         run: () => useUI.getState().setNewSession(true),
       },
       {
         id: "new-ps",
-        label: "New PowerShell session",
+        label: t.cmdNewPs,
         icon: <Plus size={15} />,
         run: () => newSession({ shell: { kind: "powershell" }, typeId: "powershell" }),
       },
       {
         id: "new-cmd",
-        label: "New Command Prompt session",
+        label: t.cmdNewCmd,
         icon: <Plus size={15} />,
         run: () => newSession({ shell: { kind: "cmd" }, typeId: "cmd" }),
       },
       {
         id: "new-wsl",
-        label: "New WSL session",
+        label: t.cmdNewWsl,
         icon: <Plus size={15} />,
         run: () => newSession({ shell: { kind: "wsl" }, typeId: "wsl" }),
       },
       {
         id: "new-bash",
-        label: "New Bash session",
+        label: t.cmdNewBash,
         icon: <Plus size={15} />,
         run: () =>
           newSession({
@@ -91,31 +93,31 @@ export function CommandPalette() {
       },
       {
         id: "new-workspace",
-        label: "New workspace",
+        label: t.newWorkspace,
         icon: <FolderPlus size={15} />,
         run: () => newWorkspace(),
       },
       {
         id: "close-session",
-        label: "Close active session",
+        label: t.cmdCloseActive,
         icon: <X size={15} />,
-        hint: "layout",
+        hint: t.hintSession,
         run: () => {
           if (activeSessionId) closeSession(activeSessionId);
         },
       },
       {
         id: "restart-session",
-        label: "Restart active session",
+        label: t.cmdRestartActive,
         icon: <RotateCw size={15} />,
-        hint: "session",
+        hint: t.hintSession,
         run: () => {
           if (activeSessionId) void restartSession(activeSessionId);
         },
       },
       {
         id: "maximize-pane",
-        label: "Maximize / restore active pane",
+        label: t.cmdMaximize,
         icon: <Maximize2 size={15} />,
         hint: "Ctrl+Shift+M",
         run: () => {
@@ -124,7 +126,7 @@ export function CommandPalette() {
       },
       {
         id: "find-terminal",
-        label: "Find in terminal",
+        label: t.findInTerminal,
         icon: <Search size={15} />,
         hint: "Ctrl+Shift+F",
         run: () => {
@@ -133,38 +135,38 @@ export function CommandPalette() {
       },
       {
         id: "font-bigger",
-        label: "Increase terminal font size",
+        label: t.cmdFontUp,
         icon: <Plus size={15} />,
         run: () => bumpFontSize(1),
       },
       {
         id: "font-smaller",
-        label: "Decrease terminal font size",
+        label: t.cmdFontDown,
         icon: <Minus size={15} />,
         run: () => bumpFontSize(-1),
       },
       {
         id: "toggle-sidebar",
-        label: "Toggle sidebar",
+        label: t.cmdToggleSidebar,
         icon: <PanelLeft size={15} />,
         hint: "Ctrl+Shift+B",
         run: () => useUI.getState().toggleSidebar(),
       },
       {
         id: "shortcuts",
-        label: "Keyboard shortcuts",
+        label: t.cmdShortcuts,
         icon: <Keyboard size={15} />,
         run: () => useUI.getState().setShortcuts(true),
       },
       {
         id: "toggle-theme",
-        label: "Toggle light / dark theme",
+        label: t.cmdToggleTheme,
         icon: <Palette size={15} />,
         run: () => setTheme(resolveTheme(theme) === "dark" ? "light" : "dark"),
       },
       {
         id: "settings",
-        label: "Open settings",
+        label: t.cmdSettings,
         icon: <SettingsIcon size={15} />,
         run: () => setSettings(true),
       },
@@ -172,22 +174,22 @@ export function CommandPalette() {
 
     const wsCmds: Command[] = workspaces.map((w) => ({
       id: `ws-${w.id}`,
-      label: `Switch to: ${w.name}`,
+      label: t.cmdSwitchTo(w.name),
       icon: <Layers size={15} />,
-      hint: "workspace",
+      hint: t.hintWorkspace,
       run: () => switchWorkspace(w.id),
     }));
 
     const openers: Command[] = Object.values(sessions).map((n) => ({
       id: `open-${n.id}`,
-      label: `Open: ${n.name}`,
+      label: t.cmdOpen(n.name),
       icon: <SessionIcon typeId={n.typeId} size={16} />,
-      hint: "session",
+      hint: t.hintSession,
       run: () => openSession(n.id),
     }));
 
     return [...base, ...wsCmds, ...openers];
-  }, [workspaces, sessions, activeSessionId, theme, setTheme, setSettings]);
+  }, [workspaces, sessions, activeSessionId, theme, setTheme, setSettings, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -222,13 +224,13 @@ export function CommandPalette() {
         if (e.target === e.currentTarget) setPalette(false);
       }}
     >
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" ref={boxRef}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t.commandPalette} ref={boxRef}>
         <DialogTrap containerRef={boxRef} />
         <input
           ref={inputRef}
           className="palette-input"
-          aria-label="Search commands"
-          placeholder="Type a command, workspace, or session name..."
+          aria-label={t.searchCommands}
+          placeholder={t.palettePlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -246,9 +248,9 @@ export function CommandPalette() {
             }
           }}
         />
-        <div className="palette-list" role="listbox" aria-label="Commands">
+        <div className="palette-list" role="listbox" aria-label={t.searchCommands}>
           {filtered.length === 0 ? (
-            <div className="palette-empty">No matching commands.</div>
+            <div className="palette-empty">{t.paletteEmpty}</div>
           ) : (
             filtered.map((cmd, i) => (
               <div

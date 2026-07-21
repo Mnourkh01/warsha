@@ -9,6 +9,7 @@ import { whichProgram } from "../../lib/ipc";
 import { SESSION_TYPES } from "../../lib/sessionTypes";
 import { SessionIcon } from "../icons";
 import { Pane } from "./Pane";
+import { useStrings } from "../../lib/i18n";
 
 const FILL = { height: "100%", width: "100%" } as const;
 
@@ -16,6 +17,7 @@ const FILL = { height: "100%", width: "100%" } as const;
  *  the new-session dialog, which shows the install command. */
 function StartClaudeButton() {
   const [busy, setBusy] = useState(false);
+  const t = useStrings();
   const start = async () => {
     const claude = SESSION_TYPES.find((t) => t.id === "claude");
     if (!claude) return;
@@ -41,7 +43,7 @@ function StartClaudeButton() {
   return (
     <button className="empty-cta" disabled={busy} onClick={() => void start()}>
       <SessionIcon typeId="claude" size={16} />
-      Start Claude Code here
+      {t.startClaudeHere}
     </button>
   );
 }
@@ -53,6 +55,7 @@ export function Workspace() {
   });
   const maximizedId = useUI((s) => s.maximizedSessionId);
   const rows = paneRows(ids);
+  const t = useStrings();
 
   if (ids.length === 0) {
     return (
@@ -60,9 +63,9 @@ export function Workspace() {
         <div className="workspace-empty">
           <SquareTerminal size={26} />
           <div>
-            This workspace is empty.
+            {t.emptyWorkspaceTitle}
             <br />
-            Press <kbd>Ctrl K</kbd> or the <b>+</b> button to start a session.
+            {t.emptyHintPress} <kbd>Ctrl K</kbd> {t.emptyHintOr} <b>+</b> {t.emptyHintEnd}
           </div>
           <StartClaudeButton />
         </div>

@@ -7,6 +7,7 @@ import { terminalThemeFor } from "../terminal/theme";
 import { termScheme } from "../../actions";
 import { pickFolder } from "../../lib/ipc";
 import { DialogTrap } from "../../lib/dialog-trap";
+import { useStrings, type Locale } from "../../lib/i18n";
 import type { ShellKind, ThemeMode } from "../../lib/types";
 
 const THEMES: ThemeMode[] = ["dark", "light", "system"];
@@ -27,6 +28,8 @@ export function SettingsDialog() {
   const termForeground = useSettings((s) => s.termForeground);
   const defaultShell = useSettings((s) => s.defaultShell);
   const defaultCwd = useSettings((s) => s.defaultCwd);
+  const locale = useSettings((s) => s.locale);
+  const t = useStrings();
   const boxRef = useRef<HTMLDivElement>(null);
   const [pickError, setPickError] = useState<string | null>(null);
 
@@ -57,15 +60,15 @@ export function SettingsDialog() {
         if (e.target === e.currentTarget) setSettings(false);
       }}
     >
-      <div className="dialog" role="dialog" aria-modal="true" aria-label="Settings" ref={boxRef}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={t.settings} ref={boxRef}>
         <DialogTrap containerRef={boxRef} />
         <div className="dialog-header">
-          Settings
+          {t.settings}
           <span style={{ flex: 1 }} />
           <button
             className="icon-btn"
-            title="Close"
-            aria-label="Close settings"
+            title={t.close}
+            aria-label={t.closeSettings}
             onClick={() => setSettings(false)}
           >
             <X size={16} />
@@ -73,15 +76,30 @@ export function SettingsDialog() {
         </div>
         <div className="dialog-body">
           <div className="field">
-            <span className="field-label">App theme</span>
+            <span className="field-label">{t.language}</span>
             <div className="seg">
-              {THEMES.map((t) => (
+              {(["en", "ar"] as Locale[]).map((l) => (
                 <button
-                  key={t}
-                  className={theme === t ? "on" : ""}
-                  onClick={() => setTheme(t)}
+                  key={l}
+                  className={locale === l ? "on" : ""}
+                  onClick={() => useSettings.getState().setLocale(l)}
                 >
-                  {t[0].toUpperCase() + t.slice(1)}
+                  {l === "en" ? "English" : "العربية"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="field">
+            <span className="field-label">{t.appTheme}</span>
+            <div className="seg">
+              {THEMES.map((m) => (
+                <button
+                  key={m}
+                  className={theme === m ? "on" : ""}
+                  onClick={() => setTheme(m)}
+                >
+                  {m === "dark" ? t.themeDark : m === "light" ? t.themeLight : t.themeSystem}
                 </button>
               ))}
             </div>
@@ -89,16 +107,16 @@ export function SettingsDialog() {
 
           <div className="field">
             <span className="field-label">
-              Terminal colors <span className="field-hint">(keep dark so CLIs like Claude look right)</span>
+              {t.terminalColors} <span className="field-hint">{t.terminalColorsHint}</span>
             </span>
             <div className="seg">
-              {TERM_THEMES.map((t) => (
+              {TERM_THEMES.map((m) => (
                 <button
-                  key={t}
-                  className={terminalTheme === t ? "on" : ""}
-                  onClick={() => setTermTheme(t)}
+                  key={m}
+                  className={terminalTheme === m ? "on" : ""}
+                  onClick={() => setTermTheme(m)}
                 >
-                  {t === "match" ? "Match app" : t[0].toUpperCase() + t.slice(1)}
+                  {m === "match" ? t.matchApp : m === "dark" ? t.themeDark : t.themeLight}
                 </button>
               ))}
             </div>
@@ -106,12 +124,12 @@ export function SettingsDialog() {
 
           <div className="field">
             <div className="field-row">
-              <span className="field-label">Terminal font size</span>
+              <span className="field-label">{t.terminalFontSize}</span>
               <div className="stepper">
                 <button
                   className="icon-btn"
-                  title="Smaller"
-                  aria-label="Decrease font size"
+                  title={t.smaller}
+                  aria-label={t.decreaseFont}
                   onClick={() => setFont(fontSize - 1)}
                 >
                   <Minus size={14} />
@@ -119,8 +137,8 @@ export function SettingsDialog() {
                 <span className="val" aria-live="polite">{fontSize}</span>
                 <button
                   className="icon-btn"
-                  title="Larger"
-                  aria-label="Increase font size"
+                  title={t.larger}
+                  aria-label={t.increaseFont}
                   onClick={() => setFont(fontSize + 1)}
                 >
                   <Plus size={14} />
@@ -131,13 +149,13 @@ export function SettingsDialog() {
 
           <div className="field">
             <div className="field-row">
-              <span className="field-label">Terminal text weight</span>
+              <span className="field-label">{t.terminalTextWeight}</span>
               <div className="seg">
                 <button className={!termBold ? "on" : ""} onClick={() => setBold(false)}>
-                  Normal
+                  {t.weightNormal}
                 </button>
                 <button className={termBold ? "on" : ""} onClick={() => setBold(true)}>
-                  Bold
+                  {t.weightBold}
                 </button>
               </div>
             </div>
@@ -145,24 +163,24 @@ export function SettingsDialog() {
 
           <div className="field">
             <div className="field-row">
-              <span className="field-label">Terminal text color</span>
+              <span className="field-label">{t.terminalTextColor}</span>
               <div className="stepper">
                 <input
                   type="color"
                   className="color-input"
-                  aria-label="Terminal text color"
+                  aria-label={t.terminalTextColor}
                   value={fgValue}
                   onChange={(e) => setFg(e.target.value)}
                 />
                 <button className="btn-ghost" onClick={() => setFg(undefined)}>
-                  Theme default
+                  {t.themeDefault}
                 </button>
               </div>
             </div>
           </div>
 
           <div className="field">
-            <span className="field-label">Default shell for new sessions</span>
+            <span className="field-label">{t.defaultShellLabel}</span>
             <select
               className="select"
               value={defaultShell.kind}
@@ -174,7 +192,7 @@ export function SettingsDialog() {
             >
               {defaultShell.kind === "custom" && (
                 <option value="custom" disabled>
-                  Custom ({defaultShell.program})
+                  {t.customShell(defaultShell.program)}
                 </option>
               )}
               {SHELLS.map((sh) => (
@@ -187,31 +205,30 @@ export function SettingsDialog() {
 
           <div className="field">
             <span className="field-label">
-              Default project folder{" "}
-              <span className="field-hint">(new sessions can start here in one click)</span>
+              {t.defaultFolderLabel} <span className="field-hint">{t.defaultFolderHint}</span>
             </span>
             <div className="folder-set">
               <span className="folder-set-path bidi-auto" dir="ltr">
-                {defaultCwd || "Not set"}
+                {defaultCwd || t.notSet}
               </span>
               <button
                 className="btn-ghost"
                 onClick={async () => {
                   setPickError(null);
                   try {
-                    const dir = await pickFolder("Choose your default project folder");
+                    const dir = await pickFolder(t.chooseDefaultFolder);
                     if (dir) useSettings.getState().setDefaultCwd(dir);
                   } catch (e) {
                     console.warn("folder picker failed", e);
-                    setPickError("Could not open the folder picker. Try again.");
+                    setPickError(t.pickerFailed);
                   }
                 }}
               >
-                Browse
+                {t.browse}
               </button>
               {defaultCwd ? (
                 <button className="btn-ghost" onClick={() => useSettings.getState().setDefaultCwd("")}>
-                  Clear
+                  {t.clear}
                 </button>
               ) : null}
             </div>

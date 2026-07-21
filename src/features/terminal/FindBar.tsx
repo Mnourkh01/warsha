@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useUI } from "../../store/ui";
 import { getTerminal } from "./controller";
+import { useStrings } from "../../lib/i18n";
 
 /** Search bar over the active pane, driving xterm's SearchAddon (Ctrl+Shift+F). */
 export function FindBar({ sessionId }: { sessionId: string }) {
   const setFind = useUI((s) => s.setFind);
+  const t = useStrings();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -20,12 +22,12 @@ export function FindBar({ sessionId }: { sessionId: string }) {
   };
 
   return (
-    <div className="find-bar" role="search" aria-label="Find in terminal">
+    <div className="find-bar" role="search" aria-label={t.findInTerminal}>
       <input
         ref={inputRef}
         className="find-input"
-        aria-label="Search text"
-        placeholder="Find..."
+        aria-label={t.searchText}
+        placeholder={t.findPlaceholder}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -47,21 +49,21 @@ export function FindBar({ sessionId }: { sessionId: string }) {
       />
       <button
         className="icon-btn sm"
-        title="Previous match (Shift+Enter)"
-        aria-label="Previous match"
+        title={t.prevMatch}
+        aria-label={t.prevMatchAria}
         onClick={() => getTerminal(sessionId)?.searchPrev(query)}
       >
         <ChevronUp size={14} />
       </button>
       <button
         className="icon-btn sm"
-        title="Next match (Enter)"
-        aria-label="Next match"
+        title={t.nextMatch}
+        aria-label={t.nextMatchAria}
         onClick={() => getTerminal(sessionId)?.searchNext(query)}
       >
         <ChevronDown size={14} />
       </button>
-      <button className="icon-btn sm" title="Close" aria-label="Close find bar" onClick={close}>
+      <button className="icon-btn sm" title={t.close} aria-label={t.closeFindBar} onClick={close}>
         <X size={14} />
       </button>
     </div>
