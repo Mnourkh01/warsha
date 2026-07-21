@@ -310,10 +310,6 @@ export function getTerminal(sessionId: string): TerminalController | undefined {
   return registry.get(sessionId);
 }
 
-export function hasTerminal(sessionId: string): boolean {
-  return registry.has(sessionId);
-}
-
 export function disposeTerminal(sessionId: string): Promise<void> {
   const c = registry.get(sessionId);
   if (!c) return Promise.resolve();

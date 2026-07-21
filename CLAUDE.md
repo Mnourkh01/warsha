@@ -1,4 +1,4 @@
-# CLAUDE.md — Warsha (terminal workspace)
+# CLAUDE.md - Warsha (terminal workspace)
 
 Desktop terminal-workspace app. Tauri v2 + React/TS. See `PLAN.md` for product + phases,
 `docs/system.md` for the system graph.
@@ -25,10 +25,10 @@ Desktop terminal-workspace app. Tauri v2 + React/TS. See `PLAN.md` for product +
 ```bash
 pnpm install            # deps
 pnpm tauri dev          # run app (Vite + Rust, hot reload)
-pnpm tauri build        # production installer (NSIS/MSI)
+pnpm tauri build        # production installer (NSIS, output src-tauri/target/release/bundle/nsis/)
 pnpm test               # frontend unit tests (Vitest)
 cargo test              # (in src-tauri) Rust unit tests
-pnpm lint               # eslint + tsc --noEmit
+pnpm lint               # tsc --noEmit (typecheck only; eslint is not configured)
 ```
 
 ## Conventions
@@ -37,7 +37,7 @@ pnpm lint               # eslint + tsc --noEmit
   inward. No god files; each module testable in isolation.
 - **Feature folders** on the frontend (`src/features/<feature>/`), not type-first.
 - **Rust:** `src-tauri/src/{pty,session,commands}`. PTY I/O off the main thread. No
-  `.unwrap()` on external I/O — return typed errors, log with context.
+  `.unwrap()` on external I/O - return typed errors, log with context.
 - **Typed IPC:** all `invoke`/event calls go through `src/lib/ipc.ts`; never inline string
   command names in components.
 - **Validation at the boundary:** validate command args in Rust; never trust the WebView.
@@ -73,7 +73,7 @@ pnpm lint               # eslint + tsc --noEmit
   (`margin-inline`, `padding-inline`, `inset-inline`) so a `dir` flip just works.
 - User-named content (session/group names) uses `dir="auto"` + `unicode-bidi: plaintext`
   so Arabic names go RTL and English stay LTR, mixed lines not reversed.
-- Do NOT attempt to "fix" Arabic inside the raw xterm grid — unsolved in every terminal;
+- Do NOT attempt to "fix" Arabic inside the raw xterm grid - unsolved in every terminal;
   scoped out of v1. The Stable-phase AI chat pane is the real Arabic reading surface.
 
 ## Verification (nothing is "done" until verified)

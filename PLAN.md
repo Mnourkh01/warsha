@@ -1,4 +1,4 @@
-# PLAN — Warsha (working name) · a terminal workspace
+# PLAN - Warsha (working name) · a terminal workspace
 
 > Working name "Warsha" (ورشة = workshop). Rename freely: it appears only in
 > `package.json`, `tauri.conf.json` (productName + identifier), and the window title.
@@ -22,15 +22,15 @@ distortion.
 
 ## 2. Domain glossary
 
-- **Session** — one running (or restartable) shell/PTY with a name, a shell kind, a working
+- **Session** - one running (or restartable) shell/PTY with a name, a shell kind, a working
   directory, and optional tags. The atomic unit.
-- **Group / Project** — a named tree node that contains sessions (and sub-groups). Pure
+- **Group / Project** - a named tree node that contains sessions (and sub-groups). Pure
   organization; not a process.
-- **Pane** — a slot in the tiled workspace that is currently displaying one session.
-- **Layout** — the current split arrangement of panes (which sessions are tiled and how).
-- **Tree** — the left sidebar: projects -> groups -> sessions, user-named and reorderable.
-- **PTY** — pseudo-terminal; on Windows this is ConPTY, one per running session.
-- **AI session** (Stable phase) — a session whose output is rendered as bidi markdown in a
+- **Pane** - a slot in the tiled workspace that is currently displaying one session.
+- **Layout** - the current split arrangement of panes (which sessions are tiled and how).
+- **Tree** - the left sidebar: projects -> groups -> sessions, user-named and reorderable.
+- **PTY** - pseudo-terminal; on Windows this is ConPTY, one per running session.
+- **AI session** (Stable phase) - a session whose output is rendered as bidi markdown in a
   chat pane instead of the raw grid, via a generic AI adapter.
 
 ## 3. Architecture
@@ -45,23 +45,23 @@ User
         ▼
      Rust core (Tauri backend)
         ├─ PTY manager   (portable-pty: spawn/read/write/resize/kill, one ConPTY per session)
-        ├─ Session store (tree, names, shell, cwd, tags, layout — persisted as JSON)
+        ├─ Session store (tree, names, shell, cwd, tags, layout - persisted as JSON)
         └─ Config        (theme, fonts, defaults)
         │
         ▼
    Shells / AI CLIs (PowerShell, cmd, WSL, Claude Code, ...)
 ```
 
-**Layering (Layered, not Clean — this is tool CRUD + I/O, not a deep domain):**
-- `src-tauri/src/pty/` — PTY manager (portable-pty wrapper, per-session reader thread, ID map).
-- `src-tauri/src/session/` — session/tree model + persistence (serde JSON in app config dir).
-- `src-tauri/src/commands.rs` — Tauri command surface; `src-tauri/src/main.rs` wiring.
-- `src/features/tree/` — sidebar tree (create/rename/group/reorder/tag).
-- `src/features/workspace/` — tiling pane manager + layout.
-- `src/features/terminal/` — xterm.js binding + addons + PTY event wiring.
+**Layering (Layered, not Clean - this is tool CRUD + I/O, not a deep domain):**
+- `src-tauri/src/pty/` - PTY manager (portable-pty wrapper, per-session reader thread, ID map).
+- `src-tauri/src/session/` - session/tree model + persistence (serde JSON in app config dir).
+- `src-tauri/src/commands.rs` - Tauri command surface; `src-tauri/src/main.rs` wiring.
+- `src/features/tree/` - sidebar tree (create/rename/group/reorder/tag).
+- `src/features/workspace/` - tiling pane manager + layout.
+- `src/features/terminal/` - xterm.js binding + addons + PTY event wiring.
 - `src/features/command-palette/`, `src/features/settings/`, `src/features/theme/`.
-- `src/store/` — Zustand stores (tree, layout, settings) + persistence bridge.
-- `src/lib/ipc.ts` — typed wrappers over Tauri `invoke` / event listeners.
+- `src/store/` - Zustand stores (tree, layout, settings) + persistence bridge.
+- `src/lib/ipc.ts` - typed wrappers over Tauri `invoke` / event listeners.
 
 **IPC contract:**
 - Commands: `pty_spawn({shell, cwd, cols, rows}, onData: Channel<bytes>) -> sessionId`,
@@ -82,7 +82,7 @@ User
 - **Arabic:** UI chrome + all user-named content render Arabic shaped + correctly ordered
   (`dir="auto"`, logical CSS, bundled Arabic UI font). Raw terminal-grid Arabic is
   best-effort and explicitly out of scope to "fix" (unsolved in every terminal).
-- **Fidelity:** hosts heavy TUIs (Claude Code, vim, htop) — alt-screen, mouse, truecolor,
+- **Fidelity:** hosts heavy TUIs (Claude Code, vim, htop) - alt-screen, mouse, truecolor,
   correct resize.
 
 ## 5. Quality strategy
@@ -96,15 +96,18 @@ User
 
 ## 6. Deploy path
 
-Local-first. `pnpm tauri dev` for development; `pnpm tauri build` produces an NSIS/MSI
-installer. No cloud, no telemetry in v1. Signing + auto-update are Production-phase.
+Local-first. `pnpm tauri dev` for development; `pnpm tauri build` produces an NSIS
+installer at `src-tauri/target/release/bundle/nsis/`. No cloud, no telemetry in v1.
+Signing + auto-update are Production-phase.
 
 ## 7. Phases (exit criteria each)
 
-**v1 — Core multiplexer** (this run's target)
-- Named session tree with groups (create, rename, nest, reorder, tag/color).
-- Spawn PowerShell / cmd / WSL via ConPTY; independent I/O per session.
-- Tiled split panes (H/V split, drag-resize, focus); bind any session to any pane.
+**v1 - Core multiplexer** (SHIPPED; as built, v1 chose workspaces + an opinionated grid
+over the free split tree below)
+- Named workspaces, each holding named sessions (create, rename, reorder, drag between
+  workspaces).
+- Spawn PowerShell / cmd / WSL / Bash via ConPTY; independent I/O per session.
+- Workspace grid: panes wrap 3 per row, max 6 per workspace, drag-resize, focus.
 - Run Claude Code as a normal TUI inside a grid pane.
 - Perfect RTL/Arabic app chrome + bundled Arabic UI font; light/dark theme.
 - Persist tree + names + shell + cwd + layout across restarts.
@@ -113,7 +116,7 @@ installer. No cloud, no telemetry in v1. Signing + auto-update are Production-ph
   live shell; switch/stop any; Arabic UI reads correctly; RAM within budget with 4 idle;
   `tauri build` installer within size target.
 
-**Stable — Arabic AI-chat + polish**
+**Stable - Arabic AI-chat + polish**
 - Dedicated AI chat session type via a **generic AI adapter** (Claude Code + Gemini CLI as
   first two), headless/stream, markdown rendered with full bidi Arabic.
 - Hidden-pane render suspension, session restore, in-terminal search, copy/paste hardening,

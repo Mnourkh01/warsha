@@ -45,7 +45,6 @@
 
   /* Status */
   --ok: #62c08a;
-  --warn: #e0a34a;
   --danger: #f06a7a;
 
   /* Focus ring */
@@ -74,16 +73,9 @@
   --on-accent: #ffffff;
 
   --ok: #3f9a67;
-  --warn: #9a6f1c;
   --danger: #c9445f;
 
   --ring: #6d4fd6;
-}
-
-/* Optional terminal text overrides (user-tunable in Settings; empty = use theme). */
-:root {
-  --term-fg-override: ;
-  --term-weight: 400;
 }
 
 html,

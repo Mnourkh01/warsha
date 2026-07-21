@@ -9,6 +9,10 @@ import { useWorkspaces, type Session, type Workspace } from "./workspaces";
 import { useSettings, type TerminalTheme } from "./settings";
 import type { ShellKind, ThemeMode } from "../lib/types";
 
+// Bump pattern for the NEXT schema change: raise VERSION, and either (a) write a
+// migrate(oldBlob) branch in initPersistence for cheap shape changes, or (b) accept the
+// existing backup-then-fresh-start path (sessionStateBackup keeps the old file). Never
+// let a new build overwrite an unread old blob without one of the two.
 const VERSION = 3;
 
 interface PersistBlob {

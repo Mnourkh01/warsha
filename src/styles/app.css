@@ -290,29 +290,6 @@
 .term-host .xterm {
   height: 100%;
 }
-.pane-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-faint);
-  font-size: 13px;
-  text-align: center;
-  padding: 20px;
-}
-.pane-empty kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 6px;
-  color: var(--text-dim);
-}
-
 /* resize handles (react-resizable-panels v4 Separator) */
 [data-separator] {
   background: transparent;
@@ -590,11 +567,6 @@
 .type-card:disabled {
   opacity: 0.55;
   cursor: default;
-}
-.type-icon {
-  display: inline-flex;
-  color: var(--text-dim);
-  flex: none;
 }
 .brand-badge {
   display: inline-flex;
