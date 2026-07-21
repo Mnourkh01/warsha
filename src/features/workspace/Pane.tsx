@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Columns2, Rows2, SquareTerminal, X } from "lucide-react";
+import { SquareTerminal, X } from "lucide-react";
 import type { NodeId } from "../../lib/types";
 import { useLayout } from "../../store/layout";
 import { useTree } from "../../store/tree";
@@ -13,7 +13,6 @@ const DND_TYPE = "text/warsha-node";
 export function Pane({ paneId, sessionId }: { paneId: string; sessionId: NodeId | null }) {
   const active = useLayout((s) => s.activePaneId === paneId);
   const focusPane = useLayout((s) => s.focusPane);
-  const splitPane = useLayout((s) => s.splitPane);
   const node = useTree((s) => (sessionId ? s.nodes[sessionId] : undefined));
   const status = useRuntime((s) => (sessionId ? s.status[sessionId] : undefined));
   const name = node && node.type === "session" ? node.name : null;
@@ -54,26 +53,6 @@ export function Pane({ paneId, sessionId }: { paneId: string; sessionId: NodeId 
           </span>
         )}
         <span className="pane-actions">
-          <button
-            className="icon-btn sm"
-            title="Split right"
-            onClick={(e) => {
-              e.stopPropagation();
-              splitPane(paneId, "row");
-            }}
-          >
-            <Columns2 size={14} />
-          </button>
-          <button
-            className="icon-btn sm"
-            title="Split down"
-            onClick={(e) => {
-              e.stopPropagation();
-              splitPane(paneId, "col");
-            }}
-          >
-            <Rows2 size={14} />
-          </button>
           <button
             className="icon-btn sm"
             title="Close pane"

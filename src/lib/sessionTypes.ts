@@ -1,18 +1,21 @@
 import type { ShellKind } from "./types";
 
-// Catalog for the new-session picker: shells + AI CLIs. AI entries run their command
-// inside a shell (initCommand) and carry a `probe`/`install` so we can show the install
-// command when the CLI is not on PATH.
+// Catalog for the new-session picker: shells + AI CLIs. AI entries launch their CLI
+// deterministically via `powershell -NoLogo -NoExit -Command <cli>` (runs at startup in
+// the pane's working dir, then keeps the shell alive when the CLI exits) - far more
+// reliable than typing the command after a delay. `probe`/`install` let us show the
+// install command when the CLI is not on PATH.
 export interface SessionType {
   id: string;
   label: string;
   group: "shell" | "ai";
   shell: ShellKind;
-  initCommand?: string;
   probe?: string;
   install?: string;
-  accent?: string;
-  badge?: string;
+}
+
+function aiShell(cli: string): ShellKind {
+  return { kind: "custom", program: "powershell.exe", args: ["-NoLogo", "-NoExit", "-Command", cli] };
 }
 
 export const SESSION_TYPES: SessionType[] = [
@@ -23,7 +26,7 @@ export const SESSION_TYPES: SessionType[] = [
     id: "bash",
     label: "Bash",
     group: "shell",
-    shell: { kind: "custom", program: "bash.exe" },
+    shell: { kind: "custom", program: "bash.exe", args: ["-i", "-l"] },
     probe: "bash.exe",
     install: "Install Git for Windows (git-scm.com) or enable WSL to get bash.",
   },
@@ -31,33 +34,24 @@ export const SESSION_TYPES: SessionType[] = [
     id: "claude",
     label: "Claude Code",
     group: "ai",
-    shell: { kind: "powershell" },
-    initCommand: "claude",
+    shell: aiShell("claude"),
     probe: "claude",
     install: "npm install -g @anthropic-ai/claude-code",
-    accent: "#c98a5b",
-    badge: "C",
   },
   {
     id: "gemini",
     label: "Gemini CLI",
     group: "ai",
-    shell: { kind: "powershell" },
-    initCommand: "gemini",
+    shell: aiShell("gemini"),
     probe: "gemini",
     install: "npm install -g @google/gemini-cli",
-    accent: "#6a8bef",
-    badge: "G",
   },
   {
     id: "codex",
     label: "Codex",
     group: "ai",
-    shell: { kind: "powershell" },
-    initCommand: "codex",
+    shell: aiShell("codex"),
     probe: "codex",
     install: "npm install -g @openai/codex",
-    accent: "#4fb59a",
-    badge: "X",
   },
 ];

@@ -39,13 +39,7 @@ export function NewSessionDialog() {
         return;
       }
       const base = folder.split(/[\\/]/).filter(Boolean).pop() || folder;
-      newSession({
-        shell: t.shell,
-        name: `${t.label} · ${base}`,
-        cwd: folder,
-        initCommand: t.initCommand,
-        typeId: t.id,
-      });
+      newSession({ shell: t.shell, name: `${t.label} · ${base}`, cwd: folder, typeId: t.id });
       close();
     } catch (e) {
       setMissing({ label: t.label, install: `This step needs the desktop app. (${String(e)})` });

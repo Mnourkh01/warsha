@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Columns2,
   FolderOpen,
   FolderPlus,
   Palette,
   Plus,
-  Rows2,
+  SquarePlus,
   Settings as SettingsIcon,
   X,
 } from "lucide-react";
@@ -16,12 +15,7 @@ import { useLayout } from "../../store/layout";
 import { useSettings } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
-import {
-  closePaneAction,
-  newSession,
-  openSession,
-  splitActivePane,
-} from "../../actions";
+import { addPaneAction, closePaneAction, newSession, openSession } from "../../actions";
 
 interface Command {
   id: string;
@@ -75,7 +69,11 @@ export function CommandPalette() {
         label: "New Bash session",
         icon: <Plus size={15} />,
         run: () =>
-          newSession({ shell: { kind: "custom", program: "bash.exe" }, name: "Bash", typeId: "bash" }),
+          newSession({
+            shell: { kind: "custom", program: "bash.exe", args: ["-i", "-l"] },
+            name: "Bash",
+            typeId: "bash",
+          }),
       },
       {
         id: "new-group",
@@ -84,18 +82,11 @@ export function CommandPalette() {
         run: () => useTree.getState().addGroup(null),
       },
       {
-        id: "split-right",
-        label: "Split pane right",
-        icon: <Columns2 size={15} />,
+        id: "add-pane",
+        label: "Add pane",
+        icon: <SquarePlus size={15} />,
         hint: "layout",
-        run: () => splitActivePane("row"),
-      },
-      {
-        id: "split-down",
-        label: "Split pane down",
-        icon: <Rows2 size={15} />,
-        hint: "layout",
-        run: () => splitActivePane("col"),
+        run: () => addPaneAction(),
       },
       {
         id: "close-pane",

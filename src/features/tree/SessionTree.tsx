@@ -1,29 +1,24 @@
-import { FolderPlus, Hammer, Moon, Plus, Settings, Sun } from "lucide-react";
+import { FolderPlus, Hammer, Moon, PanelLeftClose, Plus, Settings, Sun } from "lucide-react";
 import { useTree } from "../../store/tree";
 import { useLayout } from "../../store/layout";
 import { useSettings } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
-import type { NodeId, PaneNode } from "../../lib/types";
 import { TreeItem } from "./TreeItem";
-
-function sessionInPane(node: PaneNode, paneId: string): NodeId | null {
-  if (node.type === "leaf") return node.id === paneId ? node.sessionId : null;
-  return sessionInPane(node.a, paneId) ?? sessionInPane(node.b, paneId);
-}
 
 export function SessionTree() {
   const rootIds = useTree((s) => s.rootIds);
   const addGroup = useTree((s) => s.addGroup);
   const move = useTree((s) => s.move);
-  const root = useLayout((s) => s.root);
-  const activePaneId = useLayout((s) => s.activePaneId);
+  const activeSessionId = useLayout(
+    (s) => s.panes.find((p) => p.id === s.activePaneId)?.sessionId ?? null,
+  );
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
   const setSettings = useUI((s) => s.setSettings);
   const setNewSession = useUI((s) => s.setNewSession);
+  const setSidebar = useUI((s) => s.setSidebar);
 
-  const activeSessionId = sessionInPane(root, activePaneId);
   const resolved = resolveTheme(theme);
 
   return (
@@ -51,6 +46,13 @@ export function SessionTree() {
         </button>
         <button className="icon-btn" title="Settings" onClick={() => setSettings(true)}>
           <Settings size={16} />
+        </button>
+        <button
+          className="icon-btn"
+          title="Hide sidebar (Ctrl+B)"
+          onClick={() => setSidebar(false)}
+        >
+          <PanelLeftClose size={16} />
         </button>
       </div>
 

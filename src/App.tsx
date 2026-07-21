@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { PanelLeftOpen } from "lucide-react";
 import { SessionTree } from "./features/tree/SessionTree";
 import { Workspace } from "./features/workspace/Workspace";
 import { CommandPalette } from "./features/command-palette/CommandPalette";
@@ -13,6 +14,7 @@ import { onPtyExit } from "./lib/ipc";
 
 export default function App() {
   const theme = useSettings((s) => s.theme);
+  const sidebarOpen = useUI((s) => s.sidebarOpen);
 
   // Keep <html data-theme> and all terminals in sync with the theme setting.
   useEffect(() => {
@@ -57,6 +59,10 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         ui.setPalette(!ui.paletteOpen);
+      } else if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        e.stopPropagation();
+        ui.toggleSidebar();
       } else if (e.key === "Escape") {
         if (ui.paletteOpen) ui.setPalette(false);
         if (ui.settingsOpen) ui.setSettings(false);
@@ -68,7 +74,17 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <SessionTree />
+      {sidebarOpen ? (
+        <SessionTree />
+      ) : (
+        <button
+          className="sidebar-show"
+          title="Show sidebar (Ctrl+B)"
+          onClick={() => useUI.getState().setSidebar(true)}
+        >
+          <PanelLeftOpen size={16} />
+        </button>
+      )}
       <Workspace />
       <CommandPalette />
       <SettingsDialog />

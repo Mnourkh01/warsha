@@ -1,55 +1,46 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useLayout } from "./layout";
+import { MAX_PANES, useLayout } from "./layout";
 
-// Reset to a single empty leaf between tests.
 const reset = () =>
-  useLayout.getState().hydrate({
-    root: { type: "leaf", id: "seed", sessionId: null },
-    activePaneId: "seed",
-  });
+  useLayout.getState().hydrate({ panes: [{ id: "seed", sessionId: null }], activePaneId: "seed" });
 
-describe("layout store", () => {
+describe("layout store (grid)", () => {
   beforeEach(reset);
 
   it("assigns a session to the active pane", () => {
-    const l = useLayout.getState();
-    l.assignSession("seed", "sess-1");
-    expect(useLayout.getState().paneIdWithSession("sess-1")).toBe("seed");
+    useLayout.getState().assignSession("seed", "s1");
+    expect(useLayout.getState().paneIdWithSession("s1")).toBe("seed");
   });
 
-  it("splits a pane into two leaves", () => {
+  it("adds panes up to the max, then refuses", () => {
     const l = useLayout.getState();
-    const newLeaf = l.splitPane("seed", "row");
-    expect(newLeaf).toBeTruthy();
-    const root = useLayout.getState().root;
-    expect(root.type).toBe("split");
-    expect(useLayout.getState().activePaneId).toBe(newLeaf);
+    for (let i = 0; i < MAX_PANES - 1; i++) expect(l.addPane()).toBeTruthy();
+    expect(useLayout.getState().panes.length).toBe(MAX_PANES);
+    expect(useLayout.getState().addPane()).toBeNull(); // full
   });
 
   it("keeps a session in only one pane", () => {
     const l = useLayout.getState();
-    l.assignSession("seed", "sess-1");
-    const other = l.splitPane("seed", "row")!;
-    l.assignSession(other, "sess-1"); // move the same session to the new pane
-    expect(useLayout.getState().paneIdWithSession("sess-1")).toBe(other);
+    l.assignSession("seed", "s1");
+    const p2 = l.addPane()!;
+    l.assignSession(p2, "s1");
+    expect(useLayout.getState().paneIdWithSession("s1")).toBe(p2);
   });
 
-  it("collapses the split back to the sibling when a pane closes", () => {
+  it("closes a pane and returns its session; never leaves zero panes", () => {
     const l = useLayout.getState();
-    l.assignSession("seed", "keep");
-    const other = l.splitPane("seed", "row")!;
-    l.assignSession(other, "goes");
-
-    const held = l.closePane(other);
-    expect(held).toBe("goes");
-    const root = useLayout.getState().root;
-    expect(root.type).toBe("leaf");
-    expect(useLayout.getState().paneIdWithSession("keep")).toBeTruthy();
+    const p2 = l.addPane()!;
+    l.assignSession(p2, "s2");
+    expect(l.closePane(p2)).toBe("s2");
+    expect(useLayout.getState().panes.length).toBe(1);
+    l.closePane(useLayout.getState().panes[0].id);
+    expect(useLayout.getState().panes.length).toBe(1); // reseeded
   });
 
-  it("never leaves zero panes", () => {
+  it("finds the first empty pane, preferring the active one", () => {
     const l = useLayout.getState();
-    l.closePane("seed");
-    expect(useLayout.getState().root.type).toBe("leaf");
+    l.assignSession("seed", "s1");
+    const p2 = l.addPane()!;
+    expect(useLayout.getState().firstEmptyPaneId()).toBe(p2);
   });
 });

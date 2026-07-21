@@ -38,8 +38,8 @@ export function openSession(sessionId: NodeId): void {
     return;
   }
 
-  const target = layout.firstEmptyPaneId() ?? layout.splitPane(layout.activePaneId, "row");
-  if (target) openSessionInPane(sessionId, target);
+  const target = layout.firstEmptyPaneId() ?? layout.addPane() ?? layout.activePaneId;
+  openSessionInPane(sessionId, target);
 }
 
 /** Open (or move) a session into a specific pane. Used by tree click and drag-to-pane. */
@@ -117,9 +117,9 @@ export function closePaneAction(paneId: string): void {
   }
 }
 
-export function splitActivePane(dir: "row" | "col"): void {
-  const layout = useLayout.getState();
-  layout.splitPane(layout.activePaneId, dir);
+/** Add an empty pane to the grid (up to 6). */
+export function addPaneAction(): void {
+  useLayout.getState().addPane();
 }
 
 /** Delete a tree node (and descendants); clean up any open sessions. */

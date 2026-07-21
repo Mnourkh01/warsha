@@ -7,6 +7,27 @@
   overflow: hidden;
 }
 
+.sidebar-show {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.sidebar-show:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
 /* ---- sidebar ---- */
 .sidebar {
   width: 264px;

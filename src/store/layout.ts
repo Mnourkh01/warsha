@@ -1,136 +1,122 @@
 import { create } from "zustand";
-import type { NodeId, PaneNode } from "../lib/types";
+import type { NodeId } from "../lib/types";
 import { uid } from "../lib/id";
 
+// Grid workspace: an ordered list of panes, wrapped into rows of PER_ROW, capped at
+// MAX_PANES. 1-3 panes fill the first row; 4-6 start a second row. Equal widths by
+// default, mouse-resizable. This replaces the old binary split tree.
+export const MAX_PANES = 6;
+export const PER_ROW = 3;
+
+export interface Pane {
+  id: string;
+  sessionId: NodeId | null;
+}
+
 interface LayoutPersist {
-  root: PaneNode;
+  panes: Pane[];
   activePaneId: string;
 }
 
 interface LayoutState extends LayoutPersist {
   focusPane: (id: string) => void;
   assignSession: (paneId: string, sessionId: NodeId | null) => void;
-  /** Split a leaf pane; returns the new empty leaf's id (and focuses it). */
-  splitPane: (paneId: string, dir: "row" | "col") => string | null;
-  /** Close a leaf pane. Returns the sessionId it held (so the caller can kill it). */
+  /** Add an empty pane. Returns its id, or null if the grid is full (6). */
+  addPane: () => string | null;
+  /** Close a pane. Returns the sessionId it held so the caller can kill it. */
   closePane: (paneId: string) => NodeId | null;
-  paneIdWithSession: (sessionId: NodeId) => string | null;
-  /** An empty leaf to reuse (the active one if empty, else the first empty). */
   firstEmptyPaneId: () => string | null;
+  paneIdWithSession: (sessionId: NodeId) => string | null;
   clearSession: (sessionId: NodeId) => void;
-  hydrate: (data: LayoutPersist) => void;
+  isFull: () => boolean;
+  hydrate: (data: unknown) => void;
   serialize: () => LayoutPersist;
 }
 
-function makeLeaf(): PaneNode {
-  return { type: "leaf", id: uid(), sessionId: null };
-}
+const seed = (): Pane => ({ id: uid(), sessionId: null });
 
-function firstLeafId(node: PaneNode): string {
-  return node.type === "leaf" ? node.id : firstLeafId(node.a);
-}
-
-function mapLeaf(node: PaneNode, paneId: string, fn: (leaf: PaneNode) => PaneNode): PaneNode {
-  if (node.type === "leaf") return node.id === paneId ? fn(node) : node;
-  return { ...node, a: mapLeaf(node.a, paneId, fn), b: mapLeaf(node.b, paneId, fn) };
-}
-
-function clearSessionInTree(node: PaneNode, sessionId: NodeId): PaneNode {
-  if (node.type === "leaf") {
-    return node.sessionId === sessionId ? { ...node, sessionId: null } : node;
-  }
+export const useLayout = create<LayoutState>((set, get) => {
+  const first = seed();
   return {
-    ...node,
-    a: clearSessionInTree(node.a, sessionId),
-    b: clearSessionInTree(node.b, sessionId),
-  };
-}
+    panes: [first],
+    activePaneId: first.id,
 
-function findSessionPane(node: PaneNode, sessionId: NodeId): string | null {
-  if (node.type === "leaf") return node.sessionId === sessionId ? node.id : null;
-  return findSessionPane(node.a, sessionId) ?? findSessionPane(node.b, sessionId);
-}
+    focusPane: (id) => set({ activePaneId: id }),
 
-// Remove a leaf; the split that held it collapses to its sibling. Returns the new
-// subtree, or null if this whole subtree was exactly the removed leaf.
-function removeLeaf(node: PaneNode, paneId: string): PaneNode | null {
-  if (node.type === "leaf") return node.id === paneId ? null : node;
-  const a = removeLeaf(node.a, paneId);
-  const b = removeLeaf(node.b, paneId);
-  if (a === null) return b;
-  if (b === null) return a;
-  return { ...node, a, b };
-}
+    assignSession: (paneId, sessionId) =>
+      set((s) => {
+        // A session lives in at most one pane: clear it elsewhere.
+        const panes = s.panes.map((p) => {
+          if (p.id === paneId) return { ...p, sessionId };
+          if (sessionId && p.sessionId === sessionId) return { ...p, sessionId: null };
+          return p;
+        });
+        return { panes, activePaneId: paneId };
+      }),
 
-function sessionInLeaf(node: PaneNode, paneId: string): NodeId | null {
-  if (node.type === "leaf") return node.id === paneId ? node.sessionId : null;
-  return sessionInLeaf(node.a, paneId) ?? sessionInLeaf(node.b, paneId);
-}
+    addPane: () => {
+      if (get().panes.length >= MAX_PANES) return null;
+      const p = seed();
+      set((s) => ({ panes: [...s.panes, p], activePaneId: p.id }));
+      return p.id;
+    },
 
-function firstEmptyLeaf(node: PaneNode): string | null {
-  if (node.type === "leaf") return node.sessionId === null ? node.id : null;
-  return firstEmptyLeaf(node.a) ?? firstEmptyLeaf(node.b);
-}
-
-function isEmptyLeaf(node: PaneNode, paneId: string): boolean {
-  if (node.type === "leaf") return node.id === paneId && node.sessionId === null;
-  return isEmptyLeaf(node.a, paneId) || isEmptyLeaf(node.b, paneId);
-}
-
-const initialLeaf = makeLeaf();
-
-export const useLayout = create<LayoutState>((set, get) => ({
-  root: initialLeaf,
-  activePaneId: initialLeaf.id,
-
-  focusPane: (id) => set({ activePaneId: id }),
-
-  assignSession: (paneId, sessionId) =>
-    set((s) => {
-      // A session lives in at most one pane: clear it elsewhere first.
-      const cleared = sessionId ? clearSessionInTree(s.root, sessionId) : s.root;
-      const root = mapLeaf(cleared, paneId, (leaf) => ({ ...leaf, sessionId }));
-      return { root, activePaneId: paneId };
-    }),
-
-  splitPane: (paneId, dir) => {
-    const newLeaf = makeLeaf();
-    let ok = false;
-    set((s) => {
-      const root = mapLeaf(s.root, paneId, (leaf) => {
-        ok = true;
-        return { type: "split", id: uid(), dir, a: leaf, b: newLeaf };
+    closePane: (paneId) => {
+      const held = get().panes.find((p) => p.id === paneId)?.sessionId ?? null;
+      set((s) => {
+        let panes = s.panes.filter((p) => p.id !== paneId);
+        if (panes.length === 0) panes = [seed()];
+        const active = panes.some((p) => p.id === s.activePaneId)
+          ? s.activePaneId
+          : panes[0].id;
+        return { panes, activePaneId: active };
       });
-      return { root, activePaneId: newLeaf.id };
-    });
-    return ok ? newLeaf.id : null;
-  },
+      return held;
+    },
 
-  closePane: (paneId) => {
-    const held = sessionInLeaf(get().root, paneId);
-    set((s) => {
-      const root = removeLeaf(s.root, paneId) ?? makeLeaf(); // never leave zero panes
-      return { root, activePaneId: firstLeafId(root) };
-    });
-    return held;
-  },
+    firstEmptyPaneId: () => {
+      const { panes, activePaneId } = get();
+      const active = panes.find((p) => p.id === activePaneId);
+      if (active && active.sessionId === null) return active.id;
+      return panes.find((p) => p.sessionId === null)?.id ?? null;
+    },
 
-  paneIdWithSession: (sessionId) => findSessionPane(get().root, sessionId),
+    paneIdWithSession: (sessionId) =>
+      get().panes.find((p) => p.sessionId === sessionId)?.id ?? null,
 
-  firstEmptyPaneId: () => {
-    const { root, activePaneId } = get();
-    if (isEmptyLeaf(root, activePaneId)) return activePaneId; // prefer the active pane
-    return firstEmptyLeaf(root);
-  },
+    clearSession: (sessionId) =>
+      set((s) => ({
+        panes: s.panes.map((p) => (p.sessionId === sessionId ? { ...p, sessionId: null } : p)),
+      })),
 
-  clearSession: (sessionId) => set((s) => ({ root: clearSessionInTree(s.root, sessionId) })),
+    isFull: () => get().panes.length >= MAX_PANES,
 
-  hydrate: (data) => {
-    const root = data?.root ?? makeLeaf();
-    set({ root, activePaneId: firstLeafId(root) });
-  },
-  serialize: () => {
-    const { root, activePaneId } = get();
-    return { root, activePaneId };
-  },
-}));
+    hydrate: (data) => {
+      const d = data as Partial<LayoutPersist> | undefined;
+      if (d && Array.isArray(d.panes) && d.panes.length > 0) {
+        // Restore the pane layout but not live sessions (PTYs are not resumed in v1).
+        const panes = d.panes
+          .slice(0, MAX_PANES)
+          .map((p) => ({ id: p.id ?? uid(), sessionId: null }));
+        set({ panes, activePaneId: panes[0].id });
+      } else {
+        const f = seed();
+        set({ panes: [f], activePaneId: f.id });
+      }
+    },
+
+    serialize: () => {
+      const { panes, activePaneId } = get();
+      return { panes, activePaneId };
+    },
+  };
+});
+
+/** Split panes into rows of PER_ROW for grid rendering. */
+export function paneRows(panes: Pane[]): Pane[][] {
+  const rows: Pane[][] = [];
+  for (let i = 0; i < panes.length; i += PER_ROW) {
+    rows.push(panes.slice(i, i + PER_ROW));
+  }
+  return rows;
+}
