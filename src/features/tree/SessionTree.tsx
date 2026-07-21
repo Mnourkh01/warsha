@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   FolderPlus,
-  Hammer,
   Layers,
   Moon,
   PanelLeftClose,
@@ -28,7 +27,7 @@ import {
   restartSession,
   switchWorkspace,
 } from "../../actions";
-import { SessionIcon } from "../icons";
+import { SessionIcon, WarshaMark } from "../icons";
 
 const DND = "text/warsha-session";
 
@@ -48,7 +47,7 @@ export function SessionTree() {
       <div className="sidebar-header">
         <span className="brand">
           <span className="brand-mark">
-            <Hammer size={16} />
+            <WarshaMark size={14} />
           </span>
           Warsha
         </span>
