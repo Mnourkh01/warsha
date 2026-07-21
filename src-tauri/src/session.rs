@@ -60,10 +60,13 @@ fn load_from(path: &Path) -> Result<Option<Value>, String> {
         tracing::warn!(error = %e, "read state failed");
         format!("read state failed: {e}")
     })?;
+    // Windows editors (Notepad, PowerShell redirects) love to prepend a UTF-8 BOM;
+    // serde_json rejects it, which would silently reset the user's workspaces.
+    let raw = raw.trim_start_matches('\u{feff}');
     if raw.trim().is_empty() {
         return Ok(None);
     }
-    let value = serde_json::from_str(&raw).map_err(|e| {
+    let value = serde_json::from_str(raw).map_err(|e| {
         tracing::warn!(error = %e, "parse state failed");
         format!("parse state failed: {e}")
     })?;
@@ -186,6 +189,15 @@ mod tests {
         save_to(&path, &json!({"v": 2})).expect("second");
         assert_eq!(load_from(&path).unwrap().unwrap()["v"], 2);
         assert!(!path.with_extension("json.tmp").exists(), "tmp must be renamed away");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bom_prefixed_state_still_loads() {
+        let dir = test_dir("bom");
+        let path = dir.join(STATE_FILE);
+        fs::write(&path, "\u{feff}{\"v\": 7}").expect("write");
+        assert_eq!(load_from(&path).expect("load").expect("some")["v"], 7);
         let _ = fs::remove_dir_all(&dir);
     }
 
