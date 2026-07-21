@@ -92,6 +92,18 @@ export function CommandPalette() {
           }),
       },
       {
+        id: "new-claude-chat",
+        label: t.cmdNewClaudeChat,
+        icon: <SessionIcon typeId="claude-chat" size={16} />,
+        run: () => newSession({ name: "Claude Chat", typeId: "claude-chat", agent: "claude" }),
+      },
+      {
+        id: "new-gemini-chat",
+        label: t.cmdNewGeminiChat,
+        icon: <SessionIcon typeId="gemini-chat" size={16} />,
+        run: () => newSession({ name: "Gemini Chat", typeId: "gemini-chat", agent: "gemini" }),
+      },
+      {
         id: "new-workspace",
         label: t.newWorkspace,
         icon: <FolderPlus size={15} />,

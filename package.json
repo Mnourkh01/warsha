@@ -29,7 +29,9 @@
     "lucide-react": "^1.25.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.12.2",
+    "remark-gfm": "^4.0.1",
     "simple-icons": "^16.27.0",
     "zustand": "^5.0.14"
   },

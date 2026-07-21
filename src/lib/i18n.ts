@@ -146,6 +146,18 @@ const en = {
     `This workspace already has ${max} sessions. Make a new workspace or close one.`,
   sessionsOpenNote: (max: number) => `Sessions open in the active workspace (up to ${max}).`,
 
+  // chat pane
+  chatPlaceholder: (label: string) => `Message ${label}... (Enter sends, Shift+Enter new line)`,
+  chatSend: "Send",
+  chatStop: "Stop",
+  chatThinking: "Thinking...",
+  chatEmpty: (label: string) => `Ask ${label} about this folder. Arabic renders properly here.`,
+  chatAgentMissing: (agent: string) => `The ${agent} CLI is not installed or not on PATH.`,
+  chatStopped: "Stopped.",
+  chatFailed: (detail: string) => `The request failed: ${detail}`,
+  cmdNewClaudeChat: "New Claude chat",
+  cmdNewGeminiChat: "New Gemini chat",
+
   // shortcuts dialog
   keyboardShortcuts: "Keyboard shortcuts",
   closeShortcuts: "Close shortcuts",
@@ -290,6 +302,17 @@ const ar: Strings = {
   workspaceFullMsg: (max) =>
     `مساحة العمل فيها ${max} جلسات بالفعل. أنشئ مساحة جديدة أو أغلق جلسة.`,
   sessionsOpenNote: (max) => `الجلسات تفتح في مساحة العمل النشطة (حتى ${max}).`,
+
+  chatPlaceholder: (label) => `اكتب رسالة لـ ${label}... (Enter للإرسال، Shift+Enter لسطر جديد)`,
+  chatSend: "إرسال",
+  chatStop: "إيقاف",
+  chatThinking: "يفكر...",
+  chatEmpty: (label) => `اسأل ${label} عن هذا المجلد. العربية تظهر هنا بشكل صحيح.`,
+  chatAgentMissing: (agent) => `أداة ${agent} غير مثبتة أو ليست على PATH.`,
+  chatStopped: "توقف.",
+  chatFailed: (detail) => `فشل الطلب: ${detail}`,
+  cmdNewClaudeChat: "دردشة Claude جديدة",
+  cmdNewGeminiChat: "دردشة Gemini جديدة",
 
   keyboardShortcuts: "اختصارات لوحة المفاتيح",
   closeShortcuts: "إغلاق الاختصارات",

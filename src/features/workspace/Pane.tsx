@@ -4,6 +4,7 @@ import { useRuntime } from "../../store/runtime";
 import { useUI } from "../../store/ui";
 import { TerminalView } from "../terminal/TerminalView";
 import { FindBar } from "../terminal/FindBar";
+import { ChatPane } from "../chat/ChatPane";
 import { closeSession, openSession } from "../../actions";
 import { SessionIcon } from "../icons";
 import { useStrings } from "../../lib/i18n";
@@ -67,8 +68,14 @@ export function Pane({ sessionId }: { sessionId: string }) {
         </span>
       </div>
       <div className="pane-body">
-        {findOpen && <FindBar sessionId={sessionId} />}
-        <TerminalView sessionId={sessionId} active={active} />
+        {session.agent ? (
+          <ChatPane sessionId={sessionId} />
+        ) : (
+          <>
+            {findOpen && <FindBar sessionId={sessionId} />}
+            <TerminalView sessionId={sessionId} active={active} />
+          </>
+        )}
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ use serde_json::Value;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::agent::{self, AgentManager, AgentSendOpts};
 use crate::pty::{PtyManager, SpawnOpts};
 use crate::session;
 
@@ -78,4 +79,21 @@ pub fn session_state_save(app: AppHandle, state: Value) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn session_state_backup(app: AppHandle, label: String) -> Result<(), String> {
     session::backup(&app, &label)
+}
+
+/// Run one headless AI-CLI request for the chat pane, streaming stdout chunks.
+/// Blocks until the process exits, hence `async` (thread pool, never the main thread).
+#[tauri::command(async)]
+pub fn agent_send(
+    manager: State<'_, AgentManager>,
+    opts: AgentSendOpts,
+    on_output: Channel<String>,
+) -> Result<i32, String> {
+    agent::send(&manager, opts, on_output)
+}
+
+/// Cancel a chat session's in-flight request (kills the CLI process).
+#[tauri::command(async)]
+pub fn agent_cancel(manager: State<'_, AgentManager>, id: String) -> Result<(), String> {
+    agent::cancel(&manager, &id)
 }

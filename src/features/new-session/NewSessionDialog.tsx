@@ -69,8 +69,15 @@ export function NewSessionDialog() {
       return;
     }
     const cwd = folder ?? undefined;
-    const base = cwd ? cwd.split(/[\\/]/).filter(Boolean).pop() || cwd : selected.label;
-    const id = newSession({ shell: selected.shell, name: `${selected.label} · ${base}`, cwd, typeId: selected.id });
+    const base = cwd ? cwd.split(/[\\/]/).filter(Boolean).pop() || cwd : null;
+    const id = newSession({
+      shell: selected.shell,
+      // "Claude Chat · myproject" with a folder, plain "Claude Chat" without one.
+      name: base ? `${selected.label} · ${base}` : selected.label,
+      cwd,
+      typeId: selected.id,
+      agent: selected.agent,
+    });
     if (!id) {
       setError(t.workspaceFullMsg(MAX_PER_WS));
       return;

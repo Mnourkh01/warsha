@@ -1,9 +1,11 @@
 //! Warsha - a lightweight terminal workspace. Tauri app entry.
 
+mod agent;
 mod commands;
 mod pty;
 mod session;
 
+use agent::AgentManager;
 use pty::PtyManager;
 use tauri::{Manager, RunEvent};
 
@@ -23,6 +25,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(PtyManager::default())
+        .manage(AgentManager::default())
         .invoke_handler(tauri::generate_handler![
             commands::pty_spawn,
             commands::pty_write,
@@ -32,14 +35,19 @@ pub fn run() {
             commands::session_state_load,
             commands::session_state_save,
             commands::session_state_backup,
+            commands::agent_send,
+            commands::agent_cancel,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            // Kill every live ConPTY on exit so no shell children leak.
+            // Kill every live ConPTY and in-flight agent CLI on exit so nothing leaks.
             if let RunEvent::ExitRequested { .. } = event {
                 if let Some(manager) = app.try_state::<PtyManager>() {
                     manager.kill_all();
+                }
+                if let Some(agents) = app.try_state::<AgentManager>() {
+                    agents.kill_all();
                 }
             }
         });

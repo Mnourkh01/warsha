@@ -3,9 +3,11 @@
 import { useWorkspaces } from "./store/workspaces";
 import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useRuntime } from "./store/runtime";
+import { useChat } from "./store/chat";
 import { useUI } from "./store/ui";
 import { applySettingsToAll, disposeTerminal, getTerminal } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
+import { agentCancel } from "./lib/ipc";
 import { SHELL_LABELS, type ShellKind } from "./lib/types";
 
 export function shellDefaultName(shell: ShellKind): string {
@@ -32,6 +34,7 @@ export function newSession(spec: {
   cwd?: string;
   typeId?: string;
   workspaceId?: string;
+  agent?: "claude" | "gemini";
 }): string | null {
   const settings = useSettings.getState();
   const shell = spec.shell ?? settings.defaultShell;
@@ -41,11 +44,13 @@ export function newSession(spec: {
       name: spec.name ?? shellDefaultName(shell),
       cwd: spec.cwd ?? settings.defaultCwd,
       typeId: spec.typeId,
+      agent: spec.agent,
     },
     spec.workspaceId,
   );
   if (!id) return null; // workspace is full
-  useRuntime.getState().setStatus(id, "running");
+  // Chat panes have no PTY; they idle until a message is in flight.
+  useRuntime.getState().setStatus(id, spec.agent ? "idle" : "running");
   return id;
 }
 
@@ -56,18 +61,32 @@ export function openSession(id: string): void {
   queueMicrotask(() => getTerminal(id)?.focus());
 }
 
-/** Stop a session: remove it from its workspace and kill the PTY. */
+/** Stop a session: remove it from its workspace and kill the PTY (or chat request). */
 export function closeSession(id: string): void {
   const ui = useUI.getState();
+  const isChat = Boolean(useWorkspaces.getState().sessions[id]?.agent);
   if (ui.maximizedSessionId === id) ui.setMaximized(null);
   useWorkspaces.getState().removeSession(id);
-  void disposeTerminal(id);
+  if (isChat) {
+    void agentCancel(id).catch(() => {});
+    useChat.getState().clear(id);
+  } else {
+    void disposeTerminal(id);
+  }
   useRuntime.getState().clearStatus(id);
 }
 
 /** Restart a session in place (dispose + remount its TerminalView via an epoch bump).
- *  Awaits the kill so the respawn under the SAME id cannot race the old PTY teardown. */
+ *  Awaits the kill so the respawn under the SAME id cannot race the old PTY teardown.
+ *  For a chat session, restart means: stop the in-flight request, clear the transcript. */
 export async function restartSession(id: string): Promise<void> {
+  if (useWorkspaces.getState().sessions[id]?.agent) {
+    await agentCancel(id).catch(() => {});
+    useChat.getState().clear(id);
+    useRuntime.getState().setStatus(id, "idle");
+    useRuntime.getState().clearAttention(id);
+    return;
+  }
   await disposeTerminal(id);
   useRuntime.getState().setStatus(id, "running");
   useRuntime.getState().clearAttention(id);
@@ -83,12 +102,23 @@ export function switchWorkspace(id: string): void {
 }
 
 export function deleteWorkspace(id: string): void {
-  const removed = useWorkspaces.getState().removeWorkspace(id);
+  const state = useWorkspaces.getState();
+  const chatIds = new Set(
+    state.workspaces
+      .find((w) => w.id === id)
+      ?.sessionIds.filter((sid) => state.sessions[sid]?.agent) ?? [],
+  );
+  const removed = state.removeWorkspace(id);
   const runtime = useRuntime.getState();
   const ui = useUI.getState();
   for (const sid of removed) {
     if (ui.maximizedSessionId === sid) ui.setMaximized(null);
-    void disposeTerminal(sid);
+    if (chatIds.has(sid)) {
+      void agentCancel(sid).catch(() => {});
+      useChat.getState().clear(sid);
+    } else {
+      void disposeTerminal(sid);
+    }
     runtime.clearStatus(sid);
   }
 }

@@ -12,6 +12,8 @@ export interface SessionType {
   shell: ShellKind;
   probe?: string;
   install?: string;
+  /** Present = opens as a chat pane (headless CLI per message) instead of a terminal. */
+  agent?: "claude" | "gemini";
 }
 
 function aiShell(cli: string): ShellKind {
@@ -39,12 +41,31 @@ export const SESSION_TYPES: SessionType[] = [
     install: "npm install -g @anthropic-ai/claude-code",
   },
   {
+    id: "claude-chat",
+    label: "Claude Chat",
+    group: "ai",
+    // Chat panes never spawn a PTY; the shell field is unused but kept for shape.
+    shell: { kind: "powershell" },
+    probe: "claude",
+    install: "npm install -g @anthropic-ai/claude-code",
+    agent: "claude",
+  },
+  {
     id: "gemini",
     label: "Gemini CLI",
     group: "ai",
     shell: aiShell("gemini"),
     probe: "gemini",
     install: "npm install -g @google/gemini-cli",
+  },
+  {
+    id: "gemini-chat",
+    label: "Gemini Chat",
+    group: "ai",
+    shell: { kind: "powershell" },
+    probe: "gemini",
+    install: "npm install -g @google/gemini-cli",
+    agent: "gemini",
   },
   {
     id: "codex",

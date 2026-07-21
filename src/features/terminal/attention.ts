@@ -66,6 +66,11 @@ function stillExists(id: string): boolean {
   return Boolean(useWorkspaces.getState().sessions[id]);
 }
 
+/** A chat agent finished its reply; badge unless the user is watching that pane. */
+export function noteAgentDone(id: string): void {
+  if (stillExists(id) && !watchingIt(id)) useRuntime.getState().setAttention(id);
+}
+
 /** Stop tracking a session (closed or disposed). */
 export function dropTracking(id: string): void {
   const t = tracks.get(id);

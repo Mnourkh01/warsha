@@ -15,6 +15,8 @@ export interface Session {
   shell: ShellKind;
   cwd?: string;
   typeId?: string;
+  /** Present = this is an AI chat session (rendered as a chat pane, no PTY). */
+  agent?: "claude" | "gemini";
 }
 
 export interface Workspace {
@@ -36,7 +38,7 @@ interface WsState extends WsPersist {
   renameWorkspace: (id: string, name: string) => void;
   setActiveWorkspace: (id: string) => void;
   addSession: (
-    spec: { shell: ShellKind; name: string; cwd?: string; typeId?: string },
+    spec: { shell: ShellKind; name: string; cwd?: string; typeId?: string; agent?: "claude" | "gemini" },
     workspaceId?: string,
   ) => string | null;
   removeSession: (id: string) => void;
@@ -120,6 +122,7 @@ export const useWorkspaces = create<WsState>((set, get) => {
         shell: spec.shell,
         cwd: spec.cwd,
         typeId: spec.typeId,
+        agent: spec.agent,
       };
       set((s) => ({
         sessions: { ...s.sessions, [id]: session },

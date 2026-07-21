@@ -59,6 +59,32 @@ export function onPtyExit(cb: (id: string, code: number) => void): Promise<Unlis
   );
 }
 
+export interface AgentSendOpts {
+  /** Chat session id (one in-flight request per session). */
+  id: string;
+  agent: "claude" | "gemini";
+  prompt: string;
+  /** Provider conversation id to continue (Claude resume). */
+  resume?: string;
+  cwd?: string;
+}
+
+/** Run one headless AI-CLI request; `onChunk` streams raw stdout text. Resolves with
+ *  the exit code, rejects with `agent_*` errors (missing CLI, busy, cancelled, failed). */
+export async function agentSend(
+  opts: AgentSendOpts,
+  onChunk: (text: string) => void,
+): Promise<number> {
+  const channel = new Channel<string>();
+  channel.onmessage = (msg) => onChunk(String(msg));
+  return await invoke<number>("agent_send", { opts, onOutput: channel });
+}
+
+/** Cancel a chat session's in-flight request (kills the CLI process). */
+export async function agentCancel(id: string): Promise<void> {
+  await invoke("agent_cancel", { id });
+}
+
 /** Full path of a program if it is on PATH, else null. */
 export async function whichProgram(program: string): Promise<string | null> {
   return (await invoke<string | null>("which_program", { program })) ?? null;

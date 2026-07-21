@@ -45,12 +45,14 @@ export function SessionIcon({ typeId, size = 20 }: { typeId?: string; size?: num
   const g = Math.round(size * 0.62);
   switch (typeId) {
     case "claude":
+    case "claude-chat":
       return (
         <Badge bg={`#${siClaude.hex}`} size={size}>
           <Glyph path={siClaude.path} size={g} />
         </Badge>
       );
     case "gemini":
+    case "gemini-chat":
       return (
         <Badge bg={`#${siGooglegemini.hex}`} size={size}>
           <Glyph path={siGooglegemini.path} size={g} />
