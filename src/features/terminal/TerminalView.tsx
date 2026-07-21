@@ -1,34 +1,35 @@
 import { useEffect, useRef } from "react";
 import { ensureTerminal, getTerminal } from "./controller";
-import { useTree } from "../../store/tree";
-import { useSettings, resolveTerminalTheme } from "../../store/settings";
-import { resolveTheme } from "../../lib/theme";
-import type { NodeId } from "../../lib/types";
+import { useWorkspaces } from "../../store/workspaces";
+import { useRuntime } from "../../store/runtime";
+import { useSettings } from "../../store/settings";
+import { termScheme } from "../../actions";
 
-// Mounts the (registry-owned) terminal element for a session into this pane. On unmount
-// it only detaches - the controller + PTY stay alive so moving a session between panes,
-// or a React re-render, never restarts the shell.
-export function TerminalView({ sessionId, active }: { sessionId: NodeId; active: boolean }) {
+// Mounts the (registry-owned) terminal element for a session into this pane. Unmount only
+// detaches - the controller + PTY stay alive across pane moves, workspace switches, and
+// React re-renders. A restart bumps the session's runtime epoch, which re-runs the effect
+// (the controller was disposed, so ensureTerminal creates a fresh one and respawns).
+export function TerminalView({ sessionId, active }: { sessionId: string; active: boolean }) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const epoch = useRuntime((s) => s.epoch[sessionId] ?? 0);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
-    const node = useTree.getState().nodes[sessionId];
-    if (!node || node.type !== "session") return;
+    const session = useWorkspaces.getState().sessions[sessionId];
+    if (!session) return;
     const settings = useSettings.getState();
     const ctrl = ensureTerminal(sessionId, {
-      shell: node.shell,
-      cwd: node.cwd,
+      shell: session.shell,
+      cwd: session.cwd,
       fontSize: settings.fontSize,
-      theme: resolveTerminalTheme(settings.terminalTheme, resolveTheme(settings.theme)),
+      theme: termScheme(),
       foreground: settings.termForeground,
       bold: settings.termBold,
-      initCommand: node.initCommand,
     });
     ctrl.attach(mount);
     return () => ctrl.detach();
-  }, [sessionId]);
+  }, [sessionId, epoch]);
 
   useEffect(() => {
     if (active) getTerminal(sessionId)?.focus();

@@ -1,21 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  FolderOpen,
-  FolderPlus,
-  Palette,
-  Plus,
-  SquarePlus,
-  Settings as SettingsIcon,
-  X,
-} from "lucide-react";
-import { SessionIcon } from "../icons";
-import type { SessionNode } from "../../lib/types";
-import { useTree } from "../../store/tree";
-import { useLayout } from "../../store/layout";
+import { FolderPlus, Layers, Palette, Plus, Settings as SettingsIcon, X } from "lucide-react";
+import { useWorkspaces } from "../../store/workspaces";
 import { useSettings } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
-import { addPaneAction, closePaneAction, newSession, openSession } from "../../actions";
+import {
+  closeSession,
+  newSession,
+  newWorkspace,
+  openSession,
+  switchWorkspace,
+} from "../../actions";
+import { SessionIcon } from "../icons";
 
 interface Command {
   id: string;
@@ -28,8 +24,9 @@ interface Command {
 export function CommandPalette() {
   const open = useUI((s) => s.paletteOpen);
   const setPalette = useUI((s) => s.setPalette);
-  const nodes = useTree((s) => s.nodes);
-  const activePaneId = useLayout((s) => s.activePaneId);
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const sessions = useWorkspaces((s) => s.sessions);
+  const activeSessionId = useWorkspaces((s) => s.activeSessionId);
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
   const setSettings = useUI((s) => s.setSettings);
@@ -43,7 +40,7 @@ export function CommandPalette() {
       {
         id: "new-picker",
         label: "New session in a folder...",
-        icon: <FolderOpen size={15} />,
+        icon: <SessionIcon typeId="powershell" size={16} />,
         run: () => useUI.getState().setNewSession(true),
       },
       {
@@ -76,24 +73,19 @@ export function CommandPalette() {
           }),
       },
       {
-        id: "new-group",
-        label: "New group",
+        id: "new-workspace",
+        label: "New workspace",
         icon: <FolderPlus size={15} />,
-        run: () => useTree.getState().addGroup(null),
+        run: () => newWorkspace(),
       },
       {
-        id: "add-pane",
-        label: "Add pane",
-        icon: <SquarePlus size={15} />,
-        hint: "layout",
-        run: () => addPaneAction(),
-      },
-      {
-        id: "close-pane",
-        label: "Close active pane",
+        id: "close-session",
+        label: "Close active session",
         icon: <X size={15} />,
         hint: "layout",
-        run: () => closePaneAction(activePaneId),
+        run: () => {
+          if (activeSessionId) closeSession(activeSessionId);
+        },
       },
       {
         id: "toggle-theme",
@@ -109,18 +101,24 @@ export function CommandPalette() {
       },
     ];
 
-    const openers: Command[] = Object.values(nodes)
-      .filter((n) => n.type === "session")
-      .map((n) => ({
-        id: `open-${n.id}`,
-        label: `Open: ${n.name}`,
-        icon: <SessionIcon typeId={(n as SessionNode).typeId} size={16} />,
-        hint: "session",
-        run: () => openSession(n.id),
-      }));
+    const wsCmds: Command[] = workspaces.map((w) => ({
+      id: `ws-${w.id}`,
+      label: `Switch to: ${w.name}`,
+      icon: <Layers size={15} />,
+      hint: "workspace",
+      run: () => switchWorkspace(w.id),
+    }));
 
-    return [...base, ...openers];
-  }, [nodes, activePaneId, theme, setTheme, setSettings]);
+    const openers: Command[] = Object.values(sessions).map((n) => ({
+      id: `open-${n.id}`,
+      label: `Open: ${n.name}`,
+      icon: <SessionIcon typeId={n.typeId} size={16} />,
+      hint: "session",
+      run: () => openSession(n.id),
+    }));
+
+    return [...base, ...wsCmds, ...openers];
+  }, [workspaces, sessions, activeSessionId, theme, setTheme, setSettings]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -159,7 +157,7 @@ export function CommandPalette() {
         <input
           ref={inputRef}
           className="palette-input"
-          placeholder="Type a command or a session name..."
+          placeholder="Type a command, workspace, or session name..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {

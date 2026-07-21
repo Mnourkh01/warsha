@@ -1,24 +1,11 @@
-// High-level orchestration: the only place that composes tree + layout + runtime stores
-// with the terminal registry. UI calls these; stores stay pure.
+// High-level orchestration over the workspace store + terminal registry + runtime status.
 
-import { useTree } from "./store/tree";
-import { useLayout } from "./store/layout";
-import { useSettings } from "./store/settings";
+import { useWorkspaces } from "./store/workspaces";
+import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useRuntime } from "./store/runtime";
-import {
-  ensureTerminal,
-  disposeTerminal,
-  getTerminal,
-} from "./features/terminal/controller";
+import { disposeTerminal, getTerminal } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
-import { resolveTerminalTheme } from "./store/settings";
-import { SHELL_LABELS, type NodeId, type ShellKind } from "./lib/types";
-
-/** The terminal color scheme, resolved from its own setting + the app theme. */
-function termScheme(): "dark" | "light" {
-  const s = useSettings.getState();
-  return resolveTerminalTheme(s.terminalTheme, resolveTheme(s.theme));
-}
+import { SHELL_LABELS, type ShellKind } from "./lib/types";
 
 export function shellDefaultName(shell: ShellKind): string {
   if (shell.kind === "custom") {
@@ -28,114 +15,71 @@ export function shellDefaultName(shell: ShellKind): string {
   return SHELL_LABELS[shell.kind];
 }
 
+/** Terminal color scheme (independent of the app chrome theme). */
+export function termScheme(): "dark" | "light" {
+  const s = useSettings.getState();
+  return resolveTerminalTheme(s.terminalTheme, resolveTheme(s.theme));
+}
+
 /**
- * Open a session. If it is already visible, focus it. Otherwise place it in an empty pane
- * (the active one if empty, else any empty pane); if there is no empty pane, split the
- * active pane so the new session tiles alongside instead of replacing anything.
+ * Create a session in a workspace (active by default). The grid renders it and its
+ * TerminalView spawns the shell. Returns the id, or null if the workspace is full (6).
  */
-export function openSession(sessionId: NodeId): void {
-  const node = useTree.getState().nodes[sessionId];
-  if (!node || node.type !== "session") return;
-
-  const layout = useLayout.getState();
-  const existing = layout.paneIdWithSession(sessionId);
-  if (existing) {
-    layout.focusPane(existing);
-    getTerminal(sessionId)?.focus();
-    return;
-  }
-
-  const target = layout.firstEmptyPaneId() ?? layout.addPane() ?? layout.activePaneId;
-  openSessionInPane(sessionId, target);
-}
-
-/** Open (or move) a session into a specific pane. Used by tree click and drag-to-pane. */
-export function openSessionInPane(sessionId: NodeId, paneId: string): void {
-  const node = useTree.getState().nodes[sessionId];
-  if (!node || node.type !== "session") return;
-  const settings = useSettings.getState();
-  ensureTerminal(sessionId, {
-    shell: node.shell,
-    cwd: node.cwd,
-    fontSize: settings.fontSize,
-    theme: termScheme(),
-    foreground: settings.termForeground,
-    bold: settings.termBold,
-    initCommand: node.initCommand,
-  });
-  useRuntime.getState().setStatus(sessionId, "running");
-  useLayout.getState().assignSession(paneId, sessionId);
-  useLayout.getState().focusPane(paneId);
-  getTerminal(sessionId)?.focus();
-}
-
-/** Create a new session node and open it. */
-export interface NewSessionOpts {
-  parentId?: NodeId | null;
+export function newSession(spec: {
   shell?: ShellKind;
   name?: string;
   cwd?: string;
-  initCommand?: string;
   typeId?: string;
-}
-
-export function newSession(opts: NewSessionOpts = {}): NodeId {
+  workspaceId?: string;
+}): string | null {
   const settings = useSettings.getState();
-  const sh = opts.shell ?? settings.defaultShell;
-  const id = useTree
-    .getState()
-    .addSession(
-      opts.parentId ?? null,
-      sh,
-      opts.name ?? shellDefaultName(sh),
-      opts.cwd ?? settings.defaultCwd,
-      opts.initCommand,
-      opts.typeId,
-    );
-  openSession(id);
+  const shell = spec.shell ?? settings.defaultShell;
+  const id = useWorkspaces.getState().addSession(
+    {
+      shell,
+      name: spec.name ?? shellDefaultName(shell),
+      cwd: spec.cwd ?? settings.defaultCwd,
+      typeId: spec.typeId,
+    },
+    spec.workspaceId,
+  );
+  if (!id) return null; // workspace is full
+  useRuntime.getState().setStatus(id, "running");
   return id;
 }
 
-/** Stop a session: remove from its pane and kill the PTY. The tree node stays. */
-export function closeSession(sessionId: NodeId): void {
-  useLayout.getState().clearSession(sessionId);
-  disposeTerminal(sessionId);
-  useRuntime.getState().clearStatus(sessionId);
+/** Focus a session, switching to its workspace if needed. */
+export function openSession(id: string): void {
+  useWorkspaces.getState().setActiveSession(id);
+  queueMicrotask(() => getTerminal(id)?.focus());
 }
 
-/** Restart a running session in the same pane. */
-export function restartSession(sessionId: NodeId): void {
-  const layout = useLayout.getState();
-  const pane = layout.paneIdWithSession(sessionId);
-  disposeTerminal(sessionId);
-  useRuntime.getState().clearStatus(sessionId);
-  if (pane) {
-    layout.assignSession(pane, null);
-    queueMicrotask(() => openSessionInPane(sessionId, pane));
-  }
+/** Stop a session: remove it from its workspace and kill the PTY. */
+export function closeSession(id: string): void {
+  useWorkspaces.getState().removeSession(id);
+  disposeTerminal(id);
+  useRuntime.getState().clearStatus(id);
 }
 
-/** Close a pane; kill whatever session it held. */
-export function closePaneAction(paneId: string): void {
-  const held = useLayout.getState().closePane(paneId);
-  if (held) {
-    disposeTerminal(held);
-    useRuntime.getState().clearStatus(held);
-  }
+/** Restart a session in place (dispose + remount its TerminalView via an epoch bump). */
+export function restartSession(id: string): void {
+  disposeTerminal(id);
+  useRuntime.getState().setStatus(id, "running");
+  useRuntime.getState().bumpEpoch(id);
 }
 
-/** Add an empty pane to the grid (up to 6). */
-export function addPaneAction(): void {
-  useLayout.getState().addPane();
+export function newWorkspace(): string {
+  return useWorkspaces.getState().addWorkspace();
 }
 
-/** Delete a tree node (and descendants); clean up any open sessions. */
-export function deleteNode(id: NodeId): void {
-  const removed = useTree.getState().remove(id);
-  const layout = useLayout.getState();
+export function switchWorkspace(id: string): void {
+  useWorkspaces.getState().setActiveWorkspace(id);
+}
+
+export function deleteWorkspace(id: string): void {
+  const removed = useWorkspaces.getState().removeWorkspace(id);
   const runtime = useRuntime.getState();
   for (const sid of removed) {
-    layout.clearSession(sid);
     disposeTerminal(sid);
     runtime.clearStatus(sid);
   }

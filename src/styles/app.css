@@ -157,6 +157,49 @@
   font: inherit;
   font-size: 13px;
 }
+.ws-row .name {
+  font-weight: 600;
+}
+.ws-row.active-ws {
+  background: var(--accent-soft);
+}
+.ws-row.active-ws .name {
+  color: var(--text);
+}
+.ws-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  flex: none;
+}
+.session-row {
+  padding-inline-start: 18px;
+}
+
+.workspace-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-faint);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+.workspace-empty kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--text-dim);
+}
+
 .status-dot {
   width: 7px;
   height: 7px;
@@ -616,4 +659,75 @@
   border-top: 1px solid var(--border);
   color: var(--text-faint);
   font-size: 12px;
+}
+
+.folder-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.folder-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.folder-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-elev-2);
+}
+.folder-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.folder-btn > svg {
+  color: var(--text-dim);
+  flex: none;
+}
+.folder-btn-main {
+  font-weight: 500;
+  flex: none;
+}
+.folder-btn-path {
+  margin-inline-start: auto;
+  color: var(--text-faint);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.picker-error {
+  color: var(--danger);
+  font-size: 12.5px;
+  padding: 6px 2px 0;
+}
+
+.folder-set {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.folder-set-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
 }

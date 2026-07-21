@@ -3,6 +3,7 @@ import { useSettings, resolveTerminalTheme, type TerminalTheme } from "../../sto
 import { useUI } from "../../store/ui";
 import { applySettingsToAll } from "../terminal/controller";
 import { terminalThemeFor } from "../terminal/theme";
+import { pickFolder } from "../../lib/ipc";
 import { resolveTheme } from "../../lib/theme";
 import type { ShellKind, ThemeMode } from "../../lib/types";
 
@@ -158,14 +159,31 @@ export function SettingsDialog() {
           </div>
 
           <div className="field">
-            <span className="field-label">Default working directory (optional)</span>
-            <input
-              className="input"
-              placeholder="e.g. C:\\projects\\my-app"
-              value={s.defaultCwd ?? ""}
-              onChange={(e) => s.setDefaultCwd(e.target.value)}
-              dir="ltr"
-            />
+            <span className="field-label">
+              Default project folder{" "}
+              <span className="field-hint">(new sessions can start here in one click)</span>
+            </span>
+            <div className="folder-set">
+              <span className="folder-set-path bidi-auto" dir="ltr">
+                {s.defaultCwd || "Not set"}
+              </span>
+              <button
+                className="btn-ghost"
+                onClick={async () => {
+                  const dir = await pickFolder("Choose your default project folder").catch(
+                    () => null,
+                  );
+                  if (dir) s.setDefaultCwd(dir);
+                }}
+              >
+                Browse
+              </button>
+              {s.defaultCwd ? (
+                <button className="btn-ghost" onClick={() => s.setDefaultCwd("")}>
+                  Clear
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
