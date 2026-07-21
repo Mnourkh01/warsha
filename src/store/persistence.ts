@@ -31,6 +31,7 @@ interface PersistBlob {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let ready = false;
+let lastSavedJson = "";
 
 function buildBlob(): PersistBlob {
   return {
@@ -48,7 +49,14 @@ function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    saveState(buildBlob()).catch((err) => console.debug("workspace save skipped", err));
+    const blob = buildBlob();
+    const json = JSON.stringify(blob);
+    if (json === lastSavedJson) return; // focus-only churn; skip the disk write + fsync
+    saveState(blob)
+      .then(() => {
+        lastSavedJson = json;
+      })
+      .catch((err) => console.debug("workspace save skipped", err));
   }, 400);
 }
 
@@ -60,8 +68,15 @@ export async function flushSave(timeoutMs = 500): Promise<void> {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
+  const blob = buildBlob();
+  const json = JSON.stringify(blob);
+  if (json === lastSavedJson) return; // nothing changed since the last write
   await Promise.race([
-    saveState(buildBlob()).catch(() => undefined),
+    saveState(blob)
+      .then(() => {
+        lastSavedJson = json;
+      })
+      .catch(() => undefined),
     new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
   ]);
 }

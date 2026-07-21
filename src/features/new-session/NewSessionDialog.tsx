@@ -53,7 +53,8 @@ export function NewSessionDialog() {
       setSelected(t);
       setBusy(false);
     } catch (e) {
-      setMissing({ label: t.label, install: `This step needs the desktop app. (${String(e)})` });
+      console.warn("install probe failed", e);
+      setError(`Could not check whether ${t.label} is installed. Try again.`);
       setBusy(false);
     }
   };
@@ -81,8 +82,9 @@ export function NewSessionDialog() {
       setBusy(false);
       if (folder) void start(folder);
     } catch (e) {
+      console.warn("folder picker failed", e);
       setBusy(false);
-      setError(`Folder picker needs the desktop app. (${String(e)})`);
+      setError("Could not open the folder picker. Try again.");
     }
   };
 
@@ -152,6 +154,7 @@ export function NewSessionDialog() {
                   </div>
                 </div>
               )}
+              {error && <div className="picker-error">{error}</div>}
             </>
           ) : (
             <div className="folder-choice">

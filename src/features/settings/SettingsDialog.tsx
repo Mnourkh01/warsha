@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
-import { useSettings, resolveTerminalTheme, type TerminalTheme } from "../../store/settings";
+import { useSettings, type TerminalTheme } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { applySettingsToAll } from "../terminal/controller";
 import { terminalThemeFor } from "../terminal/theme";
+import { termScheme } from "../../actions";
 import { pickFolder } from "../../lib/ipc";
-import { resolveTheme } from "../../lib/theme";
 import { DialogTrap } from "../../lib/dialog-trap";
 import type { ShellKind, ThemeMode } from "../../lib/types";
 
@@ -20,35 +20,35 @@ const SHELLS: { value: ShellKind["kind"]; label: string }[] = [
 export function SettingsDialog() {
   const open = useUI((s) => s.settingsOpen);
   const setSettings = useUI((s) => s.setSettings);
-  const s = useSettings();
+  const theme = useSettings((s) => s.theme);
+  const terminalTheme = useSettings((s) => s.terminalTheme);
+  const fontSize = useSettings((s) => s.fontSize);
+  const termBold = useSettings((s) => s.termBold);
+  const termForeground = useSettings((s) => s.termForeground);
+  const defaultShell = useSettings((s) => s.defaultShell);
+  const defaultCwd = useSettings((s) => s.defaultCwd);
   const boxRef = useRef<HTMLDivElement>(null);
   const [pickError, setPickError] = useState<string | null>(null);
 
   if (!open) return null;
 
   const setFont = (n: number) => {
-    s.setFontSize(n);
+    useSettings.getState().setFontSize(n);
     applySettingsToAll({ fontSize: useSettings.getState().fontSize });
   };
-  const termScheme = () =>
-    resolveTerminalTheme(useSettings.getState().terminalTheme, resolveTheme(useSettings.getState().theme));
-  const setTheme = (t: ThemeMode) => {
-    s.setTheme(t);
-    applySettingsToAll({ theme: termScheme() });
-  };
-  const setTermTheme = (t: TerminalTheme) => {
-    s.setTerminalTheme(t);
-    applySettingsToAll({ theme: termScheme() });
-  };
+  // Theme changes only touch the store: the App effect is the single owner of syncing
+  // terminals to theme changes (double-applying from here caused drift).
+  const setTheme = (t: ThemeMode) => useSettings.getState().setTheme(t);
+  const setTermTheme = (t: TerminalTheme) => useSettings.getState().setTerminalTheme(t);
   const setBold = (b: boolean) => {
-    s.setTermBold(b);
+    useSettings.getState().setTermBold(b);
     applySettingsToAll({ bold: b });
   };
   const setFg = (c: string | undefined) => {
-    s.setTermForeground(c);
+    useSettings.getState().setTermForeground(c);
     applySettingsToAll({ foreground: useSettings.getState().termForeground });
   };
-  const fgValue = s.termForeground ?? (terminalThemeFor(termScheme()).foreground as string);
+  const fgValue = termForeground ?? (terminalThemeFor(termScheme()).foreground as string);
 
   return (
     <div
@@ -78,7 +78,7 @@ export function SettingsDialog() {
               {THEMES.map((t) => (
                 <button
                   key={t}
-                  className={s.theme === t ? "on" : ""}
+                  className={theme === t ? "on" : ""}
                   onClick={() => setTheme(t)}
                 >
                   {t[0].toUpperCase() + t.slice(1)}
@@ -95,7 +95,7 @@ export function SettingsDialog() {
               {TERM_THEMES.map((t) => (
                 <button
                   key={t}
-                  className={s.terminalTheme === t ? "on" : ""}
+                  className={terminalTheme === t ? "on" : ""}
                   onClick={() => setTermTheme(t)}
                 >
                   {t === "match" ? "Match app" : t[0].toUpperCase() + t.slice(1)}
@@ -112,16 +112,16 @@ export function SettingsDialog() {
                   className="icon-btn"
                   title="Smaller"
                   aria-label="Decrease font size"
-                  onClick={() => setFont(s.fontSize - 1)}
+                  onClick={() => setFont(fontSize - 1)}
                 >
                   <Minus size={14} />
                 </button>
-                <span className="val" aria-live="polite">{s.fontSize}</span>
+                <span className="val" aria-live="polite">{fontSize}</span>
                 <button
                   className="icon-btn"
                   title="Larger"
                   aria-label="Increase font size"
-                  onClick={() => setFont(s.fontSize + 1)}
+                  onClick={() => setFont(fontSize + 1)}
                 >
                   <Plus size={14} />
                 </button>
@@ -133,10 +133,10 @@ export function SettingsDialog() {
             <div className="field-row">
               <span className="field-label">Terminal text weight</span>
               <div className="seg">
-                <button className={!s.termBold ? "on" : ""} onClick={() => setBold(false)}>
+                <button className={!termBold ? "on" : ""} onClick={() => setBold(false)}>
                   Normal
                 </button>
-                <button className={s.termBold ? "on" : ""} onClick={() => setBold(true)}>
+                <button className={termBold ? "on" : ""} onClick={() => setBold(true)}>
                   Bold
                 </button>
               </div>
@@ -165,11 +165,18 @@ export function SettingsDialog() {
             <span className="field-label">Default shell for new sessions</span>
             <select
               className="select"
-              value={s.defaultShell.kind === "custom" ? "powershell" : s.defaultShell.kind}
-              onChange={(e) =>
-                s.setDefaultShell({ kind: e.target.value as ShellKind["kind"] } as ShellKind)
-              }
+              value={defaultShell.kind}
+              onChange={(e) => {
+                const kind = e.target.value as ShellKind["kind"];
+                if (kind === "custom") return; // display-only entry, not a choice
+                useSettings.getState().setDefaultShell({ kind } as ShellKind);
+              }}
             >
+              {defaultShell.kind === "custom" && (
+                <option value="custom" disabled>
+                  Custom ({defaultShell.program})
+                </option>
+              )}
               {SHELLS.map((sh) => (
                 <option key={sh.value} value={sh.value}>
                   {sh.label}
@@ -185,7 +192,7 @@ export function SettingsDialog() {
             </span>
             <div className="folder-set">
               <span className="folder-set-path bidi-auto" dir="ltr">
-                {s.defaultCwd || "Not set"}
+                {defaultCwd || "Not set"}
               </span>
               <button
                 className="btn-ghost"
@@ -193,16 +200,17 @@ export function SettingsDialog() {
                   setPickError(null);
                   try {
                     const dir = await pickFolder("Choose your default project folder");
-                    if (dir) s.setDefaultCwd(dir);
+                    if (dir) useSettings.getState().setDefaultCwd(dir);
                   } catch (e) {
-                    setPickError(`Could not open the folder picker. (${String(e)})`);
+                    console.warn("folder picker failed", e);
+                    setPickError("Could not open the folder picker. Try again.");
                   }
                 }}
               >
                 Browse
               </button>
-              {s.defaultCwd ? (
-                <button className="btn-ghost" onClick={() => s.setDefaultCwd("")}>
+              {defaultCwd ? (
+                <button className="btn-ghost" onClick={() => useSettings.getState().setDefaultCwd("")}>
                   Clear
                 </button>
               ) : null}

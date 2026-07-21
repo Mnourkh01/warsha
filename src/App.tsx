@@ -16,6 +16,9 @@ import { onPtyExit } from "./lib/ipc";
 // print, find, view-source, save, downloads, find-next.
 const BROWSER_CHORDS = new Set(["p", "f", "u", "s", "j", "g"]);
 
+// Physical keys WebView2 treats as zoom chords with Ctrl (any shift state).
+const ZOOM_CODES = new Set(["Equal", "Minus", "Digit0", "NumpadAdd", "NumpadSubtract", "Numpad0"]);
+
 export default function App() {
   const theme = useSettings((s) => s.theme);
   const terminalTheme = useSettings((s) => s.terminalTheme);
@@ -99,9 +102,10 @@ export default function App() {
         // WebView2 leaks browser accelerators (print/find/save dialogs). Inside a
         // terminal xterm suppresses them itself; block them for the app chrome too.
         e.preventDefault();
-      } else if (e.ctrlKey && !e.altKey && (key === "+" || key === "-" || key === "=" || key === "0")) {
-        // Browser zoom desyncs the terminal grid from its cell metrics. Font size
-        // changes go through Settings instead.
+      } else if (e.ctrlKey && !e.altKey && ZOOM_CODES.has(e.code)) {
+        // Browser zoom desyncs the terminal grid from its cell metrics. Match on
+        // physical codes so shift variants (Ctrl+Shift+=) and non-US layouts are
+        // covered too. Font size changes go through Settings instead.
         e.preventDefault();
       } else if (e.key === "F7") {
         e.preventDefault(); // caret-browsing prompt

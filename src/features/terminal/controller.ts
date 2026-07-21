@@ -238,7 +238,9 @@ class TerminalController {
       if (c === this.lastCols && r === this.lastRows) return;
       this.lastCols = c;
       this.lastRows = r;
-      void ptyResize(this.sessionId, c, r).catch(() => {});
+      void ptyResize(this.sessionId, c, r).catch((err) => {
+        console.debug(`resize dropped for ${this.sessionId}`, err);
+      });
     }, 60);
   }
 
@@ -252,6 +254,20 @@ class TerminalController {
         if (!this.disposed) this.term.write(bytes);
       },
     )
+      .then(() => {
+        if (this.disposed) return;
+        // The grid may have changed while the spawn was in flight; those resizes hit a
+        // not-yet-registered id and were dropped. Re-sync once the PTY exists.
+        const c = this.term.cols;
+        const r = this.term.rows;
+        if (c !== cols || r !== rows) {
+          this.lastCols = c;
+          this.lastRows = r;
+          void ptyResize(this.sessionId, c, r).catch((err) => {
+            console.debug(`post-spawn resize failed for ${this.sessionId}`, err);
+          });
+        }
+      })
       .catch((err) => {
         // Spawn failed: mark it so resize traffic stops, and correct the status dot
         // (newSession optimistically set it to "running").

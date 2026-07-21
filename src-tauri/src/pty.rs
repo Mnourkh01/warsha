@@ -156,7 +156,10 @@ impl PtyManager {
             let mut sessions = self.sessions.lock();
             if sessions.contains_key(&id) {
                 drop(sessions);
-                let _ = child.kill();
+                kill_tree(child.process_id());
+                if let Err(e) = child.kill() {
+                    tracing::debug!(session = %id, error = %e, "duplicate-spawn child kill failed");
+                }
                 let _ = child.wait();
                 return Err(format!("session '{id}' already running"));
             }
@@ -345,11 +348,22 @@ impl PtyManager {
 fn kill_tree(pid: Option<u32>) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    if let Some(pid) = pid {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/T", "/F", "/PID", &pid.to_string()])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output();
+    let Some(pid) = pid else {
+        tracing::warn!("kill_tree: no pid available, grandchildren may outlive the pane");
+        return;
+    };
+    match std::process::Command::new("taskkill")
+        .args(["/T", "/F", "/PID", &pid.to_string()])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        // A non-zero exit usually means the tree was already gone (fast exit); log at
+        // debug so a real persistent failure is still visible with RUST_LOG=debug.
+        Ok(out) if !out.status.success() => {
+            tracing::debug!(pid, code = ?out.status.code(), "taskkill reported failure");
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!(pid, error = %e, "taskkill could not run"),
     }
 }
 
