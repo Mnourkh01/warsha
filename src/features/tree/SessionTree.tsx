@@ -247,7 +247,7 @@ function WorkspaceItem({
                   const ok = await confirmDialog(
                     `Delete "${ws.name}" and close its ${ws.sessionIds.length} session(s)?`,
                     "Delete workspace",
-                  ).catch(() => true);
+                  ).catch(() => false);
                   if (!ok) return;
                 }
                 deleteWorkspace(ws.id);
