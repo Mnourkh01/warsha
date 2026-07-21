@@ -1,7 +1,13 @@
-# Warsha
+<p align="center">
+  <img src="docs/brand/warsha-mark.svg" alt="Warsha logo" width="180" />
+</p>
 
+<h1 align="center">Warsha &middot; ورشة</h1>
+
+<p align="center">
 Named workspaces of live terminals, with one-click AI agent sessions (Claude Code,
 Gemini CLI, Codex), in a ~3 MB Windows app with an Arabic-first UI.
+</p>
 
 Warsha is a terminal workspace for people who run several shells and AI CLIs at once.
 Each project gets a workspace; each workspace tiles up to 6 live terminals in a grid
@@ -52,6 +58,8 @@ cargo test              # Rust tests, run inside src-tauri/ (spawns a real ConPT
 | --- | --- |
 | Ctrl+K or Ctrl+Shift+P | Command palette |
 | Ctrl+Shift+B | Toggle sidebar |
+| Ctrl+Shift+F | Find in the active terminal |
+| Ctrl+Shift+M | Maximize / restore the active pane |
 | Ctrl+Shift+C / Ctrl+Shift+V | Copy / paste in the terminal (Ctrl+C stays SIGINT) |
 | Escape | Close the topmost dialog |
 
@@ -62,3 +70,15 @@ cargo test              # Rust tests, run inside src-tauri/ (spawns a real ConPT
   `commands.rs` (IPC surface).
 - `PLAN.md` product plan and phases; `docs/system.md` system diagram; `CLAUDE.md`
   conventions and commands.
+
+## Roadmap
+
+In order, next up:
+
+1. Agent attention badges: see which pane finished or is waiting for input, from the
+   tile and the sidebar.
+2. Arabic UI locale with a language toggle.
+3. AI chat pane with proper bidi markdown (the real Arabic reading surface).
+4. Per-workspace default folder and auto-started sessions ("resume my project").
+
+Status: early, moving fast, Windows-only by design. Built and tested on Windows 11.
