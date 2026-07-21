@@ -1,12 +1,19 @@
 import { create } from "zustand";
 import type { ShellKind, ThemeMode } from "../lib/types";
 
+// Terminal color scheme is INDEPENDENT of the app chrome theme. Default "dark" so CLIs
+// like Claude/Gemini/Codex (which assume a dark terminal) always render correctly even
+// when the app UI is in light mode. "match" follows the app theme.
+export type TerminalTheme = "dark" | "light" | "match";
+
 interface SettingsPersist {
   theme: ThemeMode;
+  terminalTheme: TerminalTheme;
   fontSize: number;
   defaultShell: ShellKind;
   defaultCwd?: string;
-  /** Optional terminal text-color override (empty string = use the theme foreground). */
+  /** Optional terminal text-color override for DEFAULT (uncolored) text only - does not
+   *  touch a CLI's own ANSI colors. Empty = use the theme foreground. */
   termForeground?: string;
   /** Render terminal text at a heavier weight. */
   termBold?: boolean;
@@ -14,6 +21,7 @@ interface SettingsPersist {
 
 interface SettingsState extends SettingsPersist {
   setTheme: (t: ThemeMode) => void;
+  setTerminalTheme: (t: TerminalTheme) => void;
   setFontSize: (n: number) => void;
   setDefaultShell: (s: ShellKind) => void;
   setDefaultCwd: (c: string) => void;
@@ -25,6 +33,7 @@ interface SettingsState extends SettingsPersist {
 
 const DEFAULTS: SettingsPersist = {
   theme: "dark",
+  terminalTheme: "dark",
   fontSize: 14,
   defaultShell: { kind: "powershell" },
   defaultCwd: undefined,
@@ -35,6 +44,7 @@ const DEFAULTS: SettingsPersist = {
 export const useSettings = create<SettingsState>((set, get) => ({
   ...DEFAULTS,
   setTheme: (theme) => set({ theme }),
+  setTerminalTheme: (terminalTheme) => set({ terminalTheme }),
   setFontSize: (fontSize) => set({ fontSize: Math.max(9, Math.min(28, fontSize)) }),
   setDefaultShell: (defaultShell) => set({ defaultShell }),
   setDefaultCwd: (defaultCwd) => set({ defaultCwd }),
@@ -43,7 +53,16 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setTermBold: (termBold) => set({ termBold }),
   hydrate: (data) => set({ ...DEFAULTS, ...data }),
   serialize: () => {
-    const { theme, fontSize, defaultShell, defaultCwd, termForeground, termBold } = get();
-    return { theme, fontSize, defaultShell, defaultCwd, termForeground, termBold };
+    const { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold } =
+      get();
+    return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold };
   },
 }));
+
+/** Resolve the terminal color scheme, given the app's resolved theme. */
+export function resolveTerminalTheme(
+  terminalTheme: TerminalTheme,
+  appResolved: "dark" | "light",
+): "dark" | "light" {
+  return terminalTheme === "match" ? appResolved : terminalTheme;
+}

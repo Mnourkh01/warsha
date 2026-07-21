@@ -11,7 +11,14 @@ import {
   getTerminal,
 } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
+import { resolveTerminalTheme } from "./store/settings";
 import { SHELL_LABELS, type NodeId, type ShellKind } from "./lib/types";
+
+/** The terminal color scheme, resolved from its own setting + the app theme. */
+function termScheme(): "dark" | "light" {
+  const s = useSettings.getState();
+  return resolveTerminalTheme(s.terminalTheme, resolveTheme(s.theme));
+}
 
 export function shellDefaultName(shell: ShellKind): string {
   if (shell.kind === "custom") {
@@ -51,7 +58,7 @@ export function openSessionInPane(sessionId: NodeId, paneId: string): void {
     shell: node.shell,
     cwd: node.cwd,
     fontSize: settings.fontSize,
-    theme: resolveTheme(settings.theme),
+    theme: termScheme(),
     foreground: settings.termForeground,
     bold: settings.termBold,
     initCommand: node.initCommand,

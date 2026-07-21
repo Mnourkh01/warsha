@@ -5,7 +5,7 @@ import { Workspace } from "./features/workspace/Workspace";
 import { CommandPalette } from "./features/command-palette/CommandPalette";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
 import { NewSessionDialog } from "./features/new-session/NewSessionDialog";
-import { useSettings } from "./store/settings";
+import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useUI } from "./store/ui";
 import { useRuntime } from "./store/runtime";
 import { applyTheme, resolveTheme } from "./lib/theme";
@@ -14,21 +14,26 @@ import { onPtyExit } from "./lib/ipc";
 
 export default function App() {
   const theme = useSettings((s) => s.theme);
+  const terminalTheme = useSettings((s) => s.terminalTheme);
   const sidebarOpen = useUI((s) => s.sidebarOpen);
 
-  // Keep <html data-theme> and all terminals in sync with the theme setting.
+  // Keep <html data-theme> synced with the app theme, and terminals synced with the
+  // (independent) terminal color scheme.
   useEffect(() => {
     applyTheme(theme);
-    applySettingsToAll({ theme: resolveTheme(theme) });
-  }, [theme]);
+    applySettingsToAll({ theme: resolveTerminalTheme(terminalTheme, resolveTheme(theme)) });
+  }, [theme, terminalTheme]);
 
   // Follow the OS theme while in "system" mode.
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
-      if (useSettings.getState().theme === "system") {
+      const s = useSettings.getState();
+      if (s.theme === "system") {
         applyTheme("system");
-        applySettingsToAll({ theme: resolveTheme("system") });
+        applySettingsToAll({
+          theme: resolveTerminalTheme(s.terminalTheme, resolveTheme("system")),
+        });
       }
     };
     mq.addEventListener("change", handler);

@@ -1,5 +1,5 @@
 import { Minus, Plus, X } from "lucide-react";
-import { useSettings } from "../../store/settings";
+import { useSettings, resolveTerminalTheme, type TerminalTheme } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { applySettingsToAll } from "../terminal/controller";
 import { terminalThemeFor } from "../terminal/theme";
@@ -7,6 +7,7 @@ import { resolveTheme } from "../../lib/theme";
 import type { ShellKind, ThemeMode } from "../../lib/types";
 
 const THEMES: ThemeMode[] = ["dark", "light", "system"];
+const TERM_THEMES: TerminalTheme[] = ["dark", "light", "match"];
 const SHELLS: { value: ShellKind["kind"]; label: string }[] = [
   { value: "powershell", label: "PowerShell" },
   { value: "cmd", label: "Command Prompt" },
@@ -24,9 +25,15 @@ export function SettingsDialog() {
     s.setFontSize(n);
     applySettingsToAll({ fontSize: useSettings.getState().fontSize });
   };
+  const termScheme = () =>
+    resolveTerminalTheme(useSettings.getState().terminalTheme, resolveTheme(useSettings.getState().theme));
   const setTheme = (t: ThemeMode) => {
     s.setTheme(t);
-    applySettingsToAll({ theme: resolveTheme(t) });
+    applySettingsToAll({ theme: termScheme() });
+  };
+  const setTermTheme = (t: TerminalTheme) => {
+    s.setTerminalTheme(t);
+    applySettingsToAll({ theme: termScheme() });
   };
   const setBold = (b: boolean) => {
     s.setTermBold(b);
@@ -36,7 +43,7 @@ export function SettingsDialog() {
     s.setTermForeground(c);
     applySettingsToAll({ foreground: useSettings.getState().termForeground });
   };
-  const fgValue = s.termForeground ?? (terminalThemeFor(resolveTheme(s.theme)).foreground as string);
+  const fgValue = s.termForeground ?? (terminalThemeFor(termScheme()).foreground as string);
 
   return (
     <div
@@ -55,7 +62,7 @@ export function SettingsDialog() {
         </div>
         <div className="dialog-body">
           <div className="field">
-            <span className="field-label">Theme</span>
+            <span className="field-label">App theme</span>
             <div className="seg">
               {THEMES.map((t) => (
                 <button
@@ -64,6 +71,23 @@ export function SettingsDialog() {
                   onClick={() => setTheme(t)}
                 >
                   {t[0].toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="field">
+            <span className="field-label">
+              Terminal colors <span className="field-hint">(keep dark so CLIs like Claude look right)</span>
+            </span>
+            <div className="seg">
+              {TERM_THEMES.map((t) => (
+                <button
+                  key={t}
+                  className={s.terminalTheme === t ? "on" : ""}
+                  onClick={() => setTermTheme(t)}
+                >
+                  {t === "match" ? "Match app" : t[0].toUpperCase() + t.slice(1)}
                 </button>
               ))}
             </div>

@@ -397,6 +397,10 @@
   font-size: 12px;
   color: var(--text-dim);
 }
+.field-hint {
+  color: var(--text-faint);
+  font-weight: 400;
+}
 .field-row {
   display: flex;
   align-items: center;

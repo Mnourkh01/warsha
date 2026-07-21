@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ensureTerminal, getTerminal } from "./controller";
 import { useTree } from "../../store/tree";
-import { useSettings } from "../../store/settings";
+import { useSettings, resolveTerminalTheme } from "../../store/settings";
 import { resolveTheme } from "../../lib/theme";
 import type { NodeId } from "../../lib/types";
 
@@ -21,7 +21,7 @@ export function TerminalView({ sessionId, active }: { sessionId: NodeId; active:
       shell: node.shell,
       cwd: node.cwd,
       fontSize: settings.fontSize,
-      theme: resolveTheme(settings.theme),
+      theme: resolveTerminalTheme(settings.terminalTheme, resolveTheme(settings.theme)),
       foreground: settings.termForeground,
       bold: settings.termBold,
       initCommand: node.initCommand,
