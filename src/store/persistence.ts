@@ -98,7 +98,14 @@ export async function initPersistence(): Promise<void> {
     closing = true;
     event.preventDefault();
     await flushSave(500);
-    void destroyAppWindow();
+    try {
+      await destroyAppWindow();
+    } catch (err) {
+      // Destroy denied/failed: clear the guard so the next close attempt (including the
+      // wrapper's own destroy on the early-return path) can still exit the app.
+      closing = false;
+      console.error("window destroy failed; close again to retry", err);
+    }
   }).catch(() => {
     /* not running inside Tauri (e.g. plain Vite dev / tests) */
   });
