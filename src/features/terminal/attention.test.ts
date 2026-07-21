@@ -27,25 +27,41 @@ describe("attention tracker", () => {
     vi.useRealTimers();
   });
 
+  /** Settle the first burst (the shell banner), which never badges by design. */
+  const prime = (id: string) => {
+    noteOutput(id, 10_000);
+    vi.advanceTimersByTime(QUIET_MS);
+  };
+
+  it("the first burst (shell banner) never badges", () => {
+    noteOutput("b", 10_000);
+    vi.advanceTimersByTime(QUIET_MS);
+    expect(useRuntime.getState().attention["b"]).toBeUndefined();
+  });
+
   it("background burst that goes quiet sets attention", () => {
+    prime("b");
     noteOutput("b", MIN_BURST_BYTES);
     vi.advanceTimersByTime(QUIET_MS);
     expect(useRuntime.getState().attention["b"]).toBe(true);
   });
 
   it("the active session never badges", () => {
+    prime("a");
     noteOutput("a", 10_000);
     vi.advanceTimersByTime(QUIET_MS);
     expect(useRuntime.getState().attention["a"]).toBeUndefined();
   });
 
   it("tiny bursts (cursor noise) are ignored", () => {
+    prime("b");
     noteOutput("b", MIN_BURST_BYTES - 1);
     vi.advanceTimersByTime(QUIET_MS);
     expect(useRuntime.getState().attention["b"]).toBeUndefined();
   });
 
   it("continuous output keeps the burst open until real silence", () => {
+    prime("b");
     noteOutput("b", 200);
     vi.advanceTimersByTime(QUIET_MS - 100);
     noteOutput("b", 200);
@@ -56,6 +72,7 @@ describe("attention tracker", () => {
   });
 
   it("switching TO the pane mid-burst suppresses the badge (decided at quiet time)", () => {
+    prime("b");
     useWorkspaces.getState().setActiveSession("b");
     noteOutput("b", 10_000);
     vi.advanceTimersByTime(QUIET_MS);

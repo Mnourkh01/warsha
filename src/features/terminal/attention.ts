@@ -14,6 +14,9 @@ export const MIN_BURST_BYTES = 64;
 interface Track {
   bytes: number;
   timer: ReturnType<typeof setTimeout> | null;
+  /** The first burst is the shell banner + prompt, not finished work; never badge it
+   *  (otherwise every restored session badges on app boot). */
+  first: boolean;
 }
 
 const tracks = new Map<string, Track>();
@@ -29,7 +32,7 @@ function watchingIt(id: string): boolean {
 export function noteOutput(id: string, byteLen: number): void {
   let t = tracks.get(id);
   if (!t) {
-    t = { bytes: 0, timer: null };
+    t = { bytes: 0, timer: null, first: true };
     tracks.set(id, t);
   }
   t.bytes += byteLen;
@@ -43,9 +46,11 @@ function settle(id: string): void {
   const t = tracks.get(id);
   if (!t) return;
   const bytes = t.bytes;
+  const first = t.first;
   t.bytes = 0;
   t.timer = null;
-  if (bytes < MIN_BURST_BYTES) return;
+  t.first = false;
+  if (first || bytes < MIN_BURST_BYTES) return;
   if (stillExists(id) && !watchingIt(id)) useRuntime.getState().setAttention(id);
 }
 
