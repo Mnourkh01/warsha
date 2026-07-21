@@ -275,15 +275,7 @@ impl PtyManager {
             session.writer_tx.clone()
         };
         // Send outside the lock: a stalled child must never block other sessions.
-        // Stable machine-readable prefixes: the frontend matches on "queue_full:" to
-        // surface a notice. Copy edits must keep the prefix intact.
-        tx.try_send(data.to_vec()).map_err(|e| match e {
-            TrySendError::Full(_) => {
-                tracing::warn!(session = %id, "pty input queue full, write rejected");
-                format!("queue_full: session '{id}' is not accepting input")
-            }
-            TrySendError::Disconnected(_) => format!("session_closed: session '{id}' closed"),
-        })
+        tx.try_send(data.to_vec()).map_err(|e| write_error(id, e))
     }
 
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<(), String> {
@@ -344,6 +336,18 @@ impl PtyManager {
 /// Best-effort kill of the whole process tree under the session's shell, so
 /// grandchildren (node dev servers etc.) do not outlive a closed pane. The direct
 /// child is then killed via `ChildKiller` regardless.
+/// Stable machine-readable prefixes: the frontend matches on "queue_full:" to surface a
+/// stalled-session notice. Copy edits must keep the prefixes intact.
+fn write_error(id: &str, e: TrySendError<Vec<u8>>) -> String {
+    match e {
+        TrySendError::Full(_) => {
+            tracing::warn!(session = %id, "pty input queue full, write rejected");
+            format!("queue_full: session '{id}' is not accepting input")
+        }
+        TrySendError::Disconnected(_) => format!("session_closed: session '{id}' closed"),
+    }
+}
+
 #[cfg(windows)]
 fn kill_tree(pid: Option<u32>) {
     use std::os::windows::process::CommandExt;
@@ -580,6 +584,19 @@ mod tests {
     }
 
     // Unknown ids: write/resize return typed errors, kill is idempotent, and a write
+    // The frontend matches on these prefixes to surface a stalled-session notice;
+    // this pins the contract so a copy edit cannot silently break it.
+    #[test]
+    fn write_errors_carry_stable_prefixes_for_the_frontend() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
+        tx.try_send(vec![0]).expect("fill");
+        let full = tx.try_send(vec![1]).unwrap_err();
+        assert!(write_error("s1", full).starts_with("queue_full:"));
+        drop(rx);
+        let closed = tx.try_send(vec![2]).unwrap_err();
+        assert!(write_error("s1", closed).starts_with("session_closed:"));
+    }
+
     // after kill errors instead of hanging.
     #[test]
     fn unknown_id_paths_error_cleanly() {

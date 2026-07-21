@@ -48,6 +48,45 @@ describe("workspaces store", () => {
     expect(useWorkspaces.getState().workspaceOf(id)).toBe(w2);
   });
 
+  it("hydrate keeps a duplicated session id in the FIRST workspace only", () => {
+    useWorkspaces.getState().hydrate({
+      workspaces: [
+        { id: "a", name: "A", sessionIds: ["s1"] },
+        { id: "b", name: "B", sessionIds: ["s1"] },
+      ],
+      sessions: { s1: { id: "s1", name: "S", shell: { kind: "cmd" } } },
+      activeWorkspaceId: "b",
+    });
+    const st = useWorkspaces.getState();
+    expect(st.workspaces.find((w) => w.id === "a")!.sessionIds).toEqual(["s1"]);
+    expect(st.workspaces.find((w) => w.id === "b")!.sessionIds).toEqual([]);
+  });
+
+  it("hydrate discards workspaces with non-string ids and repairs bad names", () => {
+    useWorkspaces.getState().hydrate({
+      workspaces: [
+        { id: 7 as unknown as string, name: "Bad", sessionIds: [] },
+        { id: "ok", name: 42 as unknown as string, sessionIds: [3 as unknown as string] },
+      ],
+      sessions: {},
+      activeWorkspaceId: "ok",
+    });
+    const st = useWorkspaces.getState();
+    expect(st.workspaces).toHaveLength(1);
+    expect(st.workspaces[0]).toMatchObject({ id: "ok", name: "Workspace", sessionIds: [] });
+  });
+
+  it("hydrate falls back to a fresh workspace when every entry is invalid", () => {
+    useWorkspaces.getState().hydrate({
+      workspaces: [{ id: null as unknown as string, name: "x", sessionIds: [] }],
+      sessions: {},
+      activeWorkspaceId: "nope",
+    });
+    const st = useWorkspaces.getState();
+    expect(st.workspaces).toHaveLength(1);
+    expect(st.workspaces[0].name).toBe("Workspace 1");
+  });
+
   it("deleting a background workspace does not steal focus", () => {
     const s1 = add("focused")!;
     const w2 = useWorkspaces.getState().addWorkspace("W2");

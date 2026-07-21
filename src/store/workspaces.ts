@@ -219,13 +219,31 @@ export const useWorkspaces = create<WsState>((set, get) => {
         typeof d.sessions === "object"
       ) {
         const raw = d.sessions;
-        const workspaces = d.workspaces.map((w) => ({
-          id: w.id,
-          name: w.name,
-          sessionIds: (Array.isArray(w.sessionIds) ? w.sessionIds : [])
-            .filter((id) => raw[id])
-            .slice(0, MAX_PER_WS),
-        }));
+        // Same boundary discipline as settings.hydrate: the blob comes from disk, so
+        // ids/names get type-checked and a session id may live in ONE workspace only
+        // (a duplicated id would double-render and fight over the same PTY).
+        const seen = new Set<string>();
+        const workspaces = d.workspaces
+          .filter((w) => !!w && typeof w.id === "string" && w.id.length > 0)
+          .map((w) => {
+            const sessionIds: string[] = [];
+            for (const id of Array.isArray(w.sessionIds) ? w.sessionIds : []) {
+              if (typeof id !== "string" || !raw[id] || seen.has(id)) continue;
+              seen.add(id);
+              sessionIds.push(id);
+              if (sessionIds.length >= MAX_PER_WS) break;
+            }
+            return {
+              id: w.id,
+              name: typeof w.name === "string" && w.name.length > 0 ? w.name : "Workspace",
+              sessionIds,
+            };
+          });
+        if (workspaces.length === 0) {
+          const f = makeWs("Workspace 1");
+          set({ workspaces: [f], sessions: {}, activeWorkspaceId: f.id, activeSessionId: null });
+          return;
+        }
         // Drop orphan sessions (in the map but in no workspace) so a corrupt blob can't
         // leak entries that re-persist forever.
         const keep = new Set(workspaces.flatMap((w) => w.sessionIds));

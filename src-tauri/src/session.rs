@@ -190,6 +190,18 @@ mod tests {
     }
 
     #[test]
+    fn oversized_blob_is_rejected_and_file_untouched() {
+        let dir = test_dir("cap");
+        let path = dir.join(STATE_FILE);
+        save_to(&path, &json!({"v": 1})).expect("small save");
+        let big = "x".repeat(MAX_STATE_BYTES + 1);
+        let err = save_to(&path, &json!({ "blob": big })).unwrap_err();
+        assert!(err.contains("too large"), "got: {err}");
+        assert_eq!(load_from(&path).unwrap().unwrap()["v"], 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn concurrent_saves_do_not_corrupt() {
         let dir = test_dir("concurrent");
         let path = dir.join(STATE_FILE);
