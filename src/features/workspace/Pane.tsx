@@ -1,7 +1,9 @@
-import { X } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 import { useWorkspaces } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
+import { useUI } from "../../store/ui";
 import { TerminalView } from "../terminal/TerminalView";
+import { FindBar } from "../terminal/FindBar";
 import { closeSession, openSession } from "../../actions";
 import { SessionIcon } from "../icons";
 
@@ -15,6 +17,8 @@ export function Pane({ sessionId }: { sessionId: string }) {
   const session = useWorkspaces((s) => s.sessions[sessionId]);
   const active = useWorkspaces((s) => s.activeSessionId === sessionId);
   const status = useRuntime((s) => s.status[sessionId]);
+  const maximized = useUI((s) => s.maximizedSessionId === sessionId);
+  const findOpen = useUI((s) => s.findOpen && active);
 
   if (!session) return null;
 
@@ -34,6 +38,17 @@ export function Pane({ sessionId }: { sessionId: string }) {
         <span className="pane-actions">
           <button
             className="icon-btn sm"
+            title={maximized ? "Restore pane (Ctrl+Shift+M)" : "Maximize pane (Ctrl+Shift+M)"}
+            aria-label={maximized ? `Restore ${session.name}` : `Maximize ${session.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              useUI.getState().toggleMaximized(sessionId);
+            }}
+          >
+            {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+          <button
+            className="icon-btn sm"
             title="Close session"
             aria-label={`Close ${session.name}`}
             onClick={(e) => {
@@ -46,6 +61,7 @@ export function Pane({ sessionId }: { sessionId: string }) {
         </span>
       </div>
       <div className="pane-body">
+        {findOpen && <FindBar sessionId={sessionId} />}
         <TerminalView sessionId={sessionId} active={active} />
       </div>
     </div>

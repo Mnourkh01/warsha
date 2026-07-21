@@ -1,14 +1,29 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FolderPlus, Layers, Palette, Plus, Settings as SettingsIcon, X } from "lucide-react";
+import {
+  FolderPlus,
+  Keyboard,
+  Layers,
+  Maximize2,
+  Minus,
+  Palette,
+  PanelLeft,
+  Plus,
+  RotateCw,
+  Search,
+  Settings as SettingsIcon,
+  X,
+} from "lucide-react";
 import { useWorkspaces } from "../../store/workspaces";
 import { useSettings } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
 import {
+  bumpFontSize,
   closeSession,
   newSession,
   newWorkspace,
   openSession,
+  restartSession,
   switchWorkspace,
 } from "../../actions";
 import { DialogTrap } from "../../lib/dialog-trap";
@@ -88,6 +103,58 @@ export function CommandPalette() {
         run: () => {
           if (activeSessionId) closeSession(activeSessionId);
         },
+      },
+      {
+        id: "restart-session",
+        label: "Restart active session",
+        icon: <RotateCw size={15} />,
+        hint: "session",
+        run: () => {
+          if (activeSessionId) void restartSession(activeSessionId);
+        },
+      },
+      {
+        id: "maximize-pane",
+        label: "Maximize / restore active pane",
+        icon: <Maximize2 size={15} />,
+        hint: "Ctrl+Shift+M",
+        run: () => {
+          if (activeSessionId) useUI.getState().toggleMaximized(activeSessionId);
+        },
+      },
+      {
+        id: "find-terminal",
+        label: "Find in terminal",
+        icon: <Search size={15} />,
+        hint: "Ctrl+Shift+F",
+        run: () => {
+          if (activeSessionId) useUI.getState().setFind(true);
+        },
+      },
+      {
+        id: "font-bigger",
+        label: "Increase terminal font size",
+        icon: <Plus size={15} />,
+        run: () => bumpFontSize(1),
+      },
+      {
+        id: "font-smaller",
+        label: "Decrease terminal font size",
+        icon: <Minus size={15} />,
+        run: () => bumpFontSize(-1),
+      },
+      {
+        id: "toggle-sidebar",
+        label: "Toggle sidebar",
+        icon: <PanelLeft size={15} />,
+        hint: "Ctrl+Shift+B",
+        run: () => useUI.getState().toggleSidebar(),
+      },
+      {
+        id: "shortcuts",
+        label: "Keyboard shortcuts",
+        icon: <Keyboard size={15} />,
+        run: () => useUI.getState().setShortcuts(true),
       },
       {
         id: "toggle-theme",

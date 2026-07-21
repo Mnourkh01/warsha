@@ -101,7 +101,10 @@ export async function initPersistence(): Promise<void> {
       console.warn(`saved state version ${String(blob.version)} unsupported; backed up as ${label}`);
     }
   } catch (err) {
+    // The file may exist but be unreadable (corrupt, locked). Back it up before
+    // autosave is allowed to overwrite it, so the data survives the fresh start.
     console.error("failed to load saved workspace", err);
+    await sessionStateBackup("loadfail").catch(() => undefined);
   } finally {
     ready = true;
     useWorkspaces.subscribe(scheduleSave);

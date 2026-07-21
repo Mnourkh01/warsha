@@ -177,8 +177,16 @@ class TerminalController {
     this.fit();
   }
 
-  search(term: string): void {
-    this.searchAddon.findNext(term);
+  searchNext(term: string, incremental = false): void {
+    if (term) this.searchAddon.findNext(term, { incremental });
+  }
+
+  searchPrev(term: string): void {
+    if (term) this.searchAddon.findPrevious(term);
+  }
+
+  clearSearch(): void {
+    this.searchAddon.clearDecorations();
   }
 
   private releaseWebgl(): void {

@@ -5,7 +5,9 @@ import { Workspace } from "./features/workspace/Workspace";
 import { CommandPalette } from "./features/command-palette/CommandPalette";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
 import { NewSessionDialog } from "./features/new-session/NewSessionDialog";
+import { ShortcutsDialog } from "./features/shortcuts/ShortcutsDialog";
 import { useSettings, resolveTerminalTheme } from "./store/settings";
+import { useWorkspaces } from "./store/workspaces";
 import { useUI } from "./store/ui";
 import { useRuntime } from "./store/runtime";
 import { applyTheme, resolveTheme } from "./lib/theme";
@@ -87,11 +89,23 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         ui.toggleSidebar();
+      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "f") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (useWorkspaces.getState().activeSessionId) ui.setFind(true);
+      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "m") {
+        e.preventDefault();
+        e.stopPropagation();
+        const sid = useWorkspaces.getState().activeSessionId;
+        if (sid) ui.toggleMaximized(sid);
       } else if (e.key === "Escape") {
-        // Close topmost-first, one layer per press.
+        // Close topmost-first, one layer per press. (The find bar handles its own
+        // Escape while its input is focused; this covers focus elsewhere.)
         if (ui.paletteOpen) ui.setPalette(false);
         else if (ui.newSessionOpen) ui.setNewSession(false);
         else if (ui.settingsOpen) ui.setSettings(false);
+        else if (ui.shortcutsOpen) ui.setShortcuts(false);
+        else if (ui.findOpen) ui.setFind(false);
       } else if (
         e.ctrlKey &&
         !e.altKey &&
@@ -143,6 +157,7 @@ export default function App() {
       <CommandPalette />
       <SettingsDialog />
       <NewSessionDialog />
+      <ShortcutsDialog />
     </div>
   );
 }

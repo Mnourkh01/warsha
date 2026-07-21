@@ -3,7 +3,8 @@
 import { useWorkspaces } from "./store/workspaces";
 import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useRuntime } from "./store/runtime";
-import { disposeTerminal, getTerminal } from "./features/terminal/controller";
+import { useUI } from "./store/ui";
+import { applySettingsToAll, disposeTerminal, getTerminal } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
 import { SHELL_LABELS, type ShellKind } from "./lib/types";
 
@@ -56,6 +57,8 @@ export function openSession(id: string): void {
 
 /** Stop a session: remove it from its workspace and kill the PTY. */
 export function closeSession(id: string): void {
+  const ui = useUI.getState();
+  if (ui.maximizedSessionId === id) ui.setMaximized(null);
   useWorkspaces.getState().removeSession(id);
   void disposeTerminal(id);
   useRuntime.getState().clearStatus(id);
@@ -80,8 +83,17 @@ export function switchWorkspace(id: string): void {
 export function deleteWorkspace(id: string): void {
   const removed = useWorkspaces.getState().removeWorkspace(id);
   const runtime = useRuntime.getState();
+  const ui = useUI.getState();
   for (const sid of removed) {
+    if (ui.maximizedSessionId === sid) ui.setMaximized(null);
     void disposeTerminal(sid);
     runtime.clearStatus(sid);
   }
+}
+
+/** Step the terminal font size and push it to every live terminal. */
+export function bumpFontSize(delta: number): void {
+  const settings = useSettings.getState();
+  settings.setFontSize(settings.fontSize + delta);
+  applySettingsToAll({ fontSize: useSettings.getState().fontSize });
 }
