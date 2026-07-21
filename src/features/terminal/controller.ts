@@ -48,6 +48,7 @@ class TerminalController {
   private lastCols = 0;
   private lastRows = 0;
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastQueueFullNotice = 0;
 
   constructor(sessionId: string, opts: TerminalOpts) {
     this.sessionId = sessionId;
@@ -84,9 +85,17 @@ class TerminalController {
     this.term.unicode.activeVersion = "11";
 
     this.term.onData((data) => {
-      // Rejections are expected on a dead session (exited/killed); the exit notice is
-      // already printed, so don't spam unhandled-rejection noise per keystroke.
-      void ptyWrite(this.sessionId, data).catch(() => {});
+      // Dead-session rejections stay silent (the exit notice is already printed), but a
+      // FULL input queue means a stalled child is eating keystrokes; say so, throttled.
+      void ptyWrite(this.sessionId, data).catch((err: unknown) => {
+        if (!String(err).startsWith("queue_full:")) return;
+        const now = Date.now();
+        if (now - this.lastQueueFullNotice < 2000) return;
+        this.lastQueueFullNotice = now;
+        this.term.write(
+          "\r\n\x1b[33m[warsha] session is not accepting input, the program looks stuck\x1b[0m\r\n",
+        );
+      });
     });
 
     // Ctrl+C is SIGINT in a shell, so copy/paste use Ctrl+Shift+C / Ctrl+Shift+V.

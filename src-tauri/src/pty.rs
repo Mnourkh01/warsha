@@ -272,12 +272,14 @@ impl PtyManager {
             session.writer_tx.clone()
         };
         // Send outside the lock: a stalled child must never block other sessions.
+        // Stable machine-readable prefixes: the frontend matches on "queue_full:" to
+        // surface a notice. Copy edits must keep the prefix intact.
         tx.try_send(data.to_vec()).map_err(|e| match e {
             TrySendError::Full(_) => {
                 tracing::warn!(session = %id, "pty input queue full, write rejected");
-                format!("session '{id}' is not accepting input (queue full)")
+                format!("queue_full: session '{id}' is not accepting input")
             }
-            TrySendError::Disconnected(_) => format!("session '{id}' closed"),
+            TrySendError::Disconnected(_) => format!("session_closed: session '{id}' closed"),
         })
     }
 
