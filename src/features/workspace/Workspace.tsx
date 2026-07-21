@@ -2,7 +2,6 @@ import { Fragment, useState } from "react";
 import { SquareTerminal } from "lucide-react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { paneRows, useWorkspaces } from "../../store/workspaces";
-import { useSettings } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { newSession } from "../../actions";
 import { whichProgram } from "../../lib/ipc";
@@ -25,10 +24,11 @@ function StartClaudeButton() {
     try {
       const found = claude.probe ? await whichProgram(claude.probe) : "ok";
       if (found) {
+        // No explicit cwd: newSession falls back to the workspace's project folder,
+        // then the global default.
         newSession({
           shell: claude.shell,
           name: claude.label,
-          cwd: useSettings.getState().defaultCwd || undefined,
           typeId: claude.id,
         });
         return;

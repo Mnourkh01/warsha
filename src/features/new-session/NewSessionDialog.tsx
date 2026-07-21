@@ -14,7 +14,12 @@ export function NewSessionDialog() {
   const t = useStrings();
   const open = useUI((s) => s.newSessionOpen);
   const setNewSession = useUI((s) => s.setNewSession);
-  const defaultCwd = useSettings((s) => s.defaultCwd);
+  const globalCwd = useSettings((s) => s.defaultCwd);
+  const workspaceCwd = useWorkspaces(
+    (s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId)?.defaultCwd,
+  );
+  // The workspace's project folder wins over the global default.
+  const defaultCwd = workspaceCwd ?? globalCwd;
   const activeFull = useWorkspaces((s) => {
     const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
     return !!ws && ws.sessionIds.length >= MAX_PER_WS;

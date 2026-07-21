@@ -37,12 +37,17 @@ export function newSession(spec: {
   agent?: "claude" | "gemini";
 }): string | null {
   const settings = useSettings.getState();
+  const ws = useWorkspaces.getState();
   const shell = spec.shell ?? settings.defaultShell;
-  const id = useWorkspaces.getState().addSession(
+  // Folder priority: explicit choice, then the workspace's project folder, then the
+  // global default. This is what makes "workspace = project" actually hold.
+  const wsId = spec.workspaceId ?? ws.activeWorkspaceId;
+  const wsCwd = ws.workspaces.find((w) => w.id === wsId)?.defaultCwd;
+  const id = ws.addSession(
     {
       shell,
       name: spec.name ?? shellDefaultName(shell),
-      cwd: spec.cwd ?? settings.defaultCwd,
+      cwd: spec.cwd ?? wsCwd ?? settings.defaultCwd,
       typeId: spec.typeId,
       agent: spec.agent,
     },

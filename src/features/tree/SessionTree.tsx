@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
+  FolderOpen,
   FolderPlus,
   Layers,
   Moon,
@@ -18,7 +19,7 @@ import { useRuntime } from "../../store/runtime";
 import { useSettings } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
-import { confirmDialog } from "../../lib/ipc";
+import { confirmDialog, pickFolder } from "../../lib/ipc";
 import {
   closeSession,
   deleteWorkspace,
@@ -123,6 +124,7 @@ function WorkspaceItem({
   activeSessionId: string | null;
 }) {
   const rename = useWorkspaces((s) => s.renameWorkspace);
+  const setWsCwd = useWorkspaces((s) => s.setWorkspaceCwd);
   const moveToWs = useWorkspaces((s) => s.moveSessionToWorkspace);
   const setNewSession = useUI((s) => s.setNewSession);
   const attentionCount = useRuntime((s) =>
@@ -139,6 +141,21 @@ function WorkspaceItem({
     const name = draft.trim();
     if (name) rename(ws.id, name);
     setEditing(false);
+  };
+
+  const setFolder = async () => {
+    try {
+      const dir = await pickFolder(t.chooseWorkspaceFolder(ws.name));
+      if (!dir) return;
+      setWsCwd(ws.id, dir);
+      // "workspace = project": an auto-named workspace takes the folder's name.
+      if (/^Workspace \d+$/.test(ws.name)) {
+        const base = dir.split(/[\\/]/).filter(Boolean).pop();
+        if (base) rename(ws.id, base);
+      }
+    } catch (e) {
+      console.warn("workspace folder picker failed", e);
+    }
   };
 
   return (
@@ -170,6 +187,7 @@ function WorkspaceItem({
             moveToWs(src, ws.id);
           }
         }}
+        title={ws.defaultCwd ? t.workspaceFolderTitle(ws.defaultCwd) : undefined}
       >
         <span
           className={`twist${collapsed ? " collapsed" : ""}`}
@@ -237,6 +255,14 @@ function WorkspaceItem({
               }}
             >
               <Plus size={13} />
+            </button>
+            <button
+              className="icon-btn sm"
+              title={t.setWorkspaceFolder}
+              aria-label={t.setWorkspaceFolderFor(ws.name)}
+              onClick={() => void setFolder()}
+            >
+              <FolderOpen size={13} />
             </button>
             <button
               className="icon-btn sm"

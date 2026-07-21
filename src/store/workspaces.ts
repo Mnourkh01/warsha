@@ -23,6 +23,8 @@ export interface Workspace {
   id: string;
   name: string;
   sessionIds: string[]; // order = grid order, capped at MAX_PER_WS
+  /** Project folder for this workspace: new sessions here start in it by default. */
+  defaultCwd?: string;
 }
 
 interface WsPersist {
@@ -36,6 +38,7 @@ interface WsState extends WsPersist {
   addWorkspace: (name?: string) => string;
   removeWorkspace: (id: string) => string[];
   renameWorkspace: (id: string, name: string) => void;
+  setWorkspaceCwd: (id: string, cwd: string | undefined) => void;
   setActiveWorkspace: (id: string) => void;
   addSession: (
     spec: { shell: ShellKind; name: string; cwd?: string; typeId?: string; agent?: "claude" | "gemini" },
@@ -103,6 +106,13 @@ export const useWorkspaces = create<WsState>((set, get) => {
     renameWorkspace: (id, name) =>
       set((s) => ({
         workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, name } : w)),
+      })),
+
+    setWorkspaceCwd: (id, cwd) =>
+      set((s) => ({
+        workspaces: s.workspaces.map((w) =>
+          w.id === id ? { ...w, defaultCwd: cwd && cwd.trim() ? cwd : undefined } : w,
+        ),
       })),
 
     setActiveWorkspace: (id) =>
@@ -240,6 +250,8 @@ export const useWorkspaces = create<WsState>((set, get) => {
               id: w.id,
               name: typeof w.name === "string" && w.name.length > 0 ? w.name : "Workspace",
               sessionIds,
+              defaultCwd:
+                typeof w.defaultCwd === "string" && w.defaultCwd.trim() ? w.defaultCwd : undefined,
             };
           });
         if (workspaces.length === 0) {

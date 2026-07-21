@@ -34,6 +34,10 @@ const en = {
   deleteWorkspaceConfirm: (name: string, count: number) =>
     `Delete "${name}" and close its ${count} session(s)?`,
   sessionsNeedAttention: (n: number) => `${n} sessions need attention`,
+  setWorkspaceFolder: "Set project folder",
+  setWorkspaceFolderFor: (name: string) => `Set project folder for ${name}`,
+  workspaceFolderTitle: (path: string) => `Project folder: ${path}`,
+  chooseWorkspaceFolder: (name: string) => `Choose the project folder for ${name}`,
 
   // session rows and panes
   sessionName: "Session name",
@@ -197,6 +201,10 @@ const ar: Strings = {
   deleteWorkspaceNamed: (name) => `حذف مساحة العمل ${name}`,
   deleteWorkspaceConfirm: (name, count) => `حذف "${name}" وإغلاق ${count} جلسة داخلها؟`,
   sessionsNeedAttention: (n) => `${n} جلسات تحتاج انتباهك`,
+  setWorkspaceFolder: "تحديد مجلد المشروع",
+  setWorkspaceFolderFor: (name) => `تحديد مجلد المشروع لـ ${name}`,
+  workspaceFolderTitle: (path) => `مجلد المشروع: ${path}`,
+  chooseWorkspaceFolder: (name) => `اختر مجلد المشروع لـ ${name}`,
 
   sessionName: "اسم الجلسة",
   restart: "إعادة تشغيل",

@@ -9,6 +9,7 @@ vi.mock("./features/terminal/controller", () => controller);
 import { closeSession, deleteWorkspace, newSession, restartSession } from "./actions";
 import { useWorkspaces } from "./store/workspaces";
 import { useRuntime } from "./store/runtime";
+import { useSettings } from "./store/settings";
 
 // The exact hard-won failure class from CLAUDE.md: a session gone from the UI while its
 // ConPTY child leaks, or a stale "running" dot on a dead pane. These tests pin the
@@ -29,6 +30,19 @@ describe("actions orchestration", () => {
     expect(id).toBeTruthy();
     expect(useWorkspaces.getState().sessions[id]).toBeTruthy();
     expect(useRuntime.getState().status[id]).toBe("running");
+  });
+
+  it("newSession folder priority: explicit cwd, then workspace folder, then global", () => {
+    useSettings.getState().setDefaultCwd("C:\\global");
+    useWorkspaces.getState().setWorkspaceCwd("w1", "C:\\project");
+    const a = newSession({ shell: { kind: "cmd" }, name: "a" })!;
+    expect(useWorkspaces.getState().sessions[a].cwd).toBe("C:\\project");
+    const b = newSession({ shell: { kind: "cmd" }, name: "b", cwd: "C:\\explicit" })!;
+    expect(useWorkspaces.getState().sessions[b].cwd).toBe("C:\\explicit");
+    useWorkspaces.getState().setWorkspaceCwd("w1", undefined);
+    const c = newSession({ shell: { kind: "cmd" }, name: "c" })!;
+    expect(useWorkspaces.getState().sessions[c].cwd).toBe("C:\\global");
+    useSettings.getState().setDefaultCwd("");
   });
 
   it("newSession on a full workspace adds nothing and sets no status", () => {

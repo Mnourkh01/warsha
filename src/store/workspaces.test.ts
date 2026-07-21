@@ -34,6 +34,27 @@ describe("workspaces store", () => {
     expect(useWorkspaces.getState().workspaces.find((w) => w.id === "w1")!.sessionIds).toContain(s1);
   });
 
+  it("keeps a workspace's project folder through hydrate, drops junk values", () => {
+    useWorkspaces.getState().hydrate({
+      workspaces: [
+        { id: "w1", name: "P", sessionIds: [], defaultCwd: "C:\\projects\\app" },
+        { id: "w2", name: "Q", sessionIds: [], defaultCwd: 42 as never },
+      ],
+      sessions: {},
+      activeWorkspaceId: "w1",
+    });
+    const [w1, w2] = useWorkspaces.getState().workspaces;
+    expect(w1.defaultCwd).toBe("C:\\projects\\app");
+    expect(w2.defaultCwd).toBeUndefined();
+  });
+
+  it("setWorkspaceCwd sets and clears the project folder", () => {
+    useWorkspaces.getState().setWorkspaceCwd("w1", "C:\\dev");
+    expect(useWorkspaces.getState().workspaces[0].defaultCwd).toBe("C:\\dev");
+    useWorkspaces.getState().setWorkspaceCwd("w1", "  ");
+    expect(useWorkspaces.getState().workspaces[0].defaultCwd).toBeUndefined();
+  });
+
   it("removes a session", () => {
     const id = add()!;
     useWorkspaces.getState().removeSession(id);
