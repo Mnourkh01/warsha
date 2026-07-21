@@ -52,6 +52,7 @@ export function newSession(spec: {
 /** Focus a session, switching to its workspace if needed. */
 export function openSession(id: string): void {
   useWorkspaces.getState().setActiveSession(id);
+  useRuntime.getState().clearAttention(id);
   queueMicrotask(() => getTerminal(id)?.focus());
 }
 
@@ -69,6 +70,7 @@ export function closeSession(id: string): void {
 export async function restartSession(id: string): Promise<void> {
   await disposeTerminal(id);
   useRuntime.getState().setStatus(id, "running");
+  useRuntime.getState().clearAttention(id);
   useRuntime.getState().bumpEpoch(id);
 }
 

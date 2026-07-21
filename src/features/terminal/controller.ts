@@ -14,6 +14,7 @@ import "@xterm/xterm/css/xterm.css";
 import { ptySpawn, ptyWrite, ptyResize, ptyKill, openExternal } from "../../lib/ipc";
 import type { ShellKind } from "../../lib/types";
 import { useRuntime } from "../../store/runtime";
+import { dropTracking, noteOutput } from "./attention";
 import { terminalBg, terminalThemeFor } from "./theme";
 
 export interface TerminalOpts {
@@ -259,7 +260,10 @@ class TerminalController {
       (bytes) => {
         // Guard: in-flight Channel bytes can arrive after dispose (xterm throws on a
         // disposed Terminal, and the throw happens inside the channel callback).
-        if (!this.disposed) this.term.write(bytes);
+        if (!this.disposed) {
+          this.term.write(bytes);
+          noteOutput(this.sessionId, bytes.length);
+        }
       },
     )
       .then(() => {
@@ -291,6 +295,7 @@ class TerminalController {
    *  so callers can safely respawn under the same session id. */
   dispose(): Promise<void> {
     this.disposed = true;
+    dropTracking(this.sessionId);
     this.ro?.disconnect();
     if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.releaseWebgl();

@@ -17,6 +17,7 @@ export function Pane({ sessionId }: { sessionId: string }) {
   const session = useWorkspaces((s) => s.sessions[sessionId]);
   const active = useWorkspaces((s) => s.activeSessionId === sessionId);
   const status = useRuntime((s) => s.status[sessionId]);
+  const attention = useRuntime((s) => Boolean(s.attention[sessionId]));
   const maximized = useUI((s) => s.maximizedSessionId === sessionId);
   const findOpen = useUI((s) => s.findOpen && active);
 
@@ -35,6 +36,14 @@ export function Pane({ sessionId }: { sessionId: string }) {
           title={statusLabel}
         />
         <span className="pane-title bidi-auto">{session.name}</span>
+        {attention && (
+          <span
+            className="attention-dot"
+            role="img"
+            aria-label="Needs attention"
+            title="Finished or waiting for input"
+          />
+        )}
         <span className="pane-actions">
           <button
             className="icon-btn sm"

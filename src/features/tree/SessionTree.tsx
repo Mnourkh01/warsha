@@ -126,6 +126,9 @@ function WorkspaceItem({
   const rename = useWorkspaces((s) => s.renameWorkspace);
   const moveToWs = useWorkspaces((s) => s.moveSessionToWorkspace);
   const setNewSession = useUI((s) => s.setNewSession);
+  const attentionCount = useRuntime((s) =>
+    ws.sessionIds.reduce((n, id) => n + (s.attention[id] ? 1 : 0), 0),
+  );
   const [collapsed, setCollapsed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(ws.name);
@@ -210,6 +213,16 @@ function WorkspaceItem({
         ) : (
           <span className="name bidi-auto">{ws.name}</span>
         )}
+        {attentionCount > 0 && (
+          <span
+            className="ws-attention"
+            role="img"
+            aria-label={`${attentionCount} sessions need attention`}
+            title={`${attentionCount} sessions need attention`}
+          >
+            {attentionCount}
+          </span>
+        )}
         <span className="ws-count">{ws.sessionIds.length}/{MAX_PER_WS}</span>
         {!editing && (
           <span className="row-actions" onClick={(e) => e.stopPropagation()}>
@@ -271,6 +284,7 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
   const reorder = useWorkspaces((s) => s.reorderSession);
   const renameSession = useWorkspaces((s) => s.renameSession);
   const status = useRuntime((s) => s.status[id]);
+  const attention = useRuntime((s) => Boolean(s.attention[id]));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -347,6 +361,14 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
         />
       ) : (
         <span className="name bidi-auto">{session.name}</span>
+      )}
+      {attention && !editing && (
+        <span
+          className="attention-dot"
+          role="img"
+          aria-label="Needs attention"
+          title="Finished or waiting for input"
+        />
       )}
       {!editing && (
         <span className="row-actions" onClick={(e) => e.stopPropagation()}>

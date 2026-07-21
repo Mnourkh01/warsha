@@ -12,6 +12,7 @@ import { useUI } from "./store/ui";
 import { useRuntime } from "./store/runtime";
 import { applyTheme, resolveTheme } from "./lib/theme";
 import { applySettingsToAll, getTerminal } from "./features/terminal/controller";
+import { noteExit } from "./features/terminal/attention";
 import { onPtyExit } from "./lib/ipc";
 
 // Browser accelerators WebView2 would otherwise hijack from app chrome:
@@ -56,6 +57,7 @@ export default function App() {
     onPtyExit((id, code) => {
       useRuntime.getState().setStatus(id, "exited");
       getTerminal(id)?.notifyExit(code);
+      noteExit(id);
     })
       .then((u) => {
         // If the effect was cleaned up before listen() resolved (StrictMode dev
@@ -70,6 +72,16 @@ export default function App() {
       cancelled = true;
       unlisten?.();
     };
+  }, []);
+
+  // Coming back to the window means the user is looking at the active pane again.
+  useEffect(() => {
+    const onFocus = () => {
+      const sid = useWorkspaces.getState().activeSessionId;
+      if (sid) useRuntime.getState().clearAttention(sid);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   // Global shortcuts, capture phase so they beat the focused terminal.

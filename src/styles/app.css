@@ -241,6 +241,48 @@
   border: 2px solid var(--danger);
   box-sizing: border-box;
 }
+
+/* A background session finished a burst of output or exited: it wants your eyes. */
+.attention-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--accent);
+  animation: attention-pulse 1.8s ease-out infinite;
+}
+@keyframes attention-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .attention-dot {
+    animation: none;
+  }
+}
+
+/* Per-workspace attention count, visible even when the workspace is collapsed. */
+.ws-attention {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
 .row-actions {
   display: inline-flex;
   gap: 1px;
