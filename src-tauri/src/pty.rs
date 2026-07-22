@@ -398,6 +398,35 @@ fn build_command(shell: &ShellSpec, cwd: Option<&str>) -> CommandBuilder {
         }
     }
     cmd.env("TERM", "xterm-256color");
+    // xterm.js renders 24-bit color; advertise it exactly like Windows Terminal and Warp
+    // do, so color-aware programs (claude included) pick their full palette.
+    cmd.env("COLORTERM", "truecolor");
+    // Shells inherit the full env of whatever launched warsha.exe. When that launcher was a
+    // Claude Code session (e.g. `pnpm tauri dev` run from a claude shell), the inherited env
+    // carries claude's subprocess pollution: NO_COLOR=1 makes every program render
+    // monochrome (the all-white claude bug), the GIT_* trio silently breaks interactive git
+    // (no auth prompt, `true` as editor), and the session markers make a nested `claude`
+    // disable transcript saving. A Warsha shell must behave like a fresh native terminal,
+    // so drop the set - but only when the CLAUDECODE marker proves a claude launcher, so a
+    // user's own deliberate global NO_COLOR/GIT_* settings survive a normal launch.
+    if std::env::var_os("CLAUDECODE").is_some() {
+        const CLAUDE_LAUNCHER_POLLUTION: [&str; 8] = [
+            "CLAUDECODE",
+            "CLAUDE_CODE_ENTRYPOINT",
+            "CLAUDE_PID",
+            "NO_COLOR",
+            "FORCE_COLOR",
+            "GIT_ASKPASS",
+            "GIT_EDITOR",
+            "GIT_TERMINAL_PROMPT",
+        ];
+        for key in CLAUDE_LAUNCHER_POLLUTION {
+            cmd.env_remove(key);
+        }
+    }
+    // These two are claude-only vars (no legitimate user intent), always stripped.
+    cmd.env_remove("CLAUDE_CODE_CHILD_SESSION");
+    cmd.env_remove("CLAUDE_CODE_SESSION_ID");
     cmd
 }
 
@@ -633,6 +662,18 @@ mod tests {
     fn build_command_sets_term_and_validates_cwd() {
         let cmd = build_command(&ShellSpec::Powershell, None);
         assert_eq!(cmd.get_env("TERM").and_then(|v| v.to_str()), Some("xterm-256color"));
+        assert_eq!(cmd.get_env("COLORTERM").and_then(|v| v.to_str()), Some("truecolor"));
+        // Nested-session markers must be stripped even when the launcher (e.g. this test
+        // run under a Claude Code session) carries them in its environment.
+        assert!(cmd.get_env("CLAUDE_CODE_CHILD_SESSION").is_none());
+        assert!(cmd.get_env("CLAUDE_CODE_SESSION_ID").is_none());
+        // When this test itself runs under a claude launcher, the pollution set must be
+        // gone too (the all-white-claude / broken-git inheritance bug).
+        if std::env::var_os("CLAUDECODE").is_some() {
+            assert!(cmd.get_env("NO_COLOR").is_none());
+            assert!(cmd.get_env("GIT_TERMINAL_PROMPT").is_none());
+            assert!(cmd.get_env("GIT_EDITOR").is_none());
+        }
 
         let cmd = build_command(&ShellSpec::Cmd, Some("C:\\warsha-definitely-missing-dir"));
         assert!(cmd.get_cwd().is_none(), "nonexistent cwd must be skipped");

@@ -11,10 +11,19 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
 
-import { ptySpawn, ptyWrite, ptyResize, ptyKill, openExternal } from "../../lib/ipc";
+import {
+  ptySpawn,
+  ptyWrite,
+  ptyResize,
+  ptyKill,
+  openExternal,
+  clipboardReadText,
+  clipboardWriteText,
+} from "../../lib/ipc";
 import type { ShellKind } from "../../lib/types";
 import { useRuntime } from "../../store/runtime";
 import { dropTracking, noteOutput } from "./attention";
+import { shapeArabicVisual } from "./arabicGlyphs";
 import { terminalBg, terminalThemeFor } from "./theme";
 
 export interface TerminalOpts {
@@ -50,6 +59,9 @@ class TerminalController {
   private lastRows = 0;
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private lastQueueFullNotice = 0;
+  // Streaming decoder so a multibyte UTF-8 sequence split across two PTY chunks still
+  // decodes correctly (state carries between decode(bytes, {stream: true}) calls).
+  private decoder = new TextDecoder();
 
   constructor(sessionId: string, opts: TerminalOpts) {
     this.sessionId = sessionId;
@@ -60,7 +72,10 @@ class TerminalController {
 
     this.term = new Terminal({
       allowProposedApi: true,
-      fontFamily: '"IBM Plex Mono", ui-monospace, "Cascadia Code", monospace',
+      // "Courier New" is the deterministic fallback for Arabic Presentation Forms
+      // (U+FE70-FEFF, produced by shapeArabicVisual): it ships with Windows, includes the
+      // full range, and stays metric-stable inside the monospace grid.
+      fontFamily: '"IBM Plex Mono", ui-monospace, "Cascadia Code", "Courier New", monospace',
       fontSize: opts.fontSize,
       fontWeight: opts.bold ? 600 : 400,
       fontWeightBold: opts.bold ? 700 : 700,
@@ -99,24 +114,53 @@ class TerminalController {
       });
     });
 
-    // Ctrl+C is SIGINT in a shell, so copy/paste use Ctrl+Shift+C / Ctrl+Shift+V.
+    // Ctrl+C is SIGINT in a shell, so copy/paste use Ctrl+Shift+C / Ctrl+Shift+V plus the
+    // console-standard Ctrl+Insert / Shift+Insert. Clipboard I/O goes through the Rust
+    // plugin (clipboardReadText/WriteText), not navigator.clipboard - WebView2 blocks
+    // clipboard READ from the WebView, which is why paste silently did nothing before.
     this.term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
-      if (e.ctrlKey && e.shiftKey && e.code === "KeyC") {
-        const sel = this.term.getSelection();
-        if (sel) void navigator.clipboard.writeText(sel);
+      const copy =
+        (e.ctrlKey && e.shiftKey && e.code === "KeyC") || (e.ctrlKey && e.code === "Insert");
+      const paste =
+        (e.ctrlKey && e.shiftKey && e.code === "KeyV") || (e.shiftKey && e.code === "Insert");
+      if (copy) {
+        this.copySelection();
         return false;
       }
-      if (e.ctrlKey && e.shiftKey && e.code === "KeyV") {
-        void navigator.clipboard.readText().then((t) => {
-          // paste() honors bracketed-paste (mode 2004) when the app enabled it, so a
-          // multi-line snippet does not execute line-by-line in vim/REPLs.
-          if (t) this.term.paste(t);
-        });
+      if (paste) {
+        this.pasteClipboard();
         return false;
       }
       return true;
     });
+
+    // Right-click follows the Windows console convention: copy when there is a selection,
+    // otherwise paste. Gives mouse-only users a full copy/paste path.
+    this.el.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      if (this.term.hasSelection()) {
+        this.copySelection();
+        this.term.clearSelection();
+      } else {
+        this.pasteClipboard();
+      }
+    });
+  }
+
+  private copySelection(): void {
+    const sel = this.term.getSelection();
+    if (sel) void clipboardWriteText(sel).catch((err) => console.warn("clipboard copy failed", err));
+  }
+
+  private pasteClipboard(): void {
+    void clipboardReadText()
+      .then((t) => {
+        // paste() honors bracketed-paste (mode 2004) when the app enabled it, so a
+        // multi-line snippet does not execute line-by-line in vim/REPLs.
+        if (t && !this.disposed) this.term.paste(t);
+      })
+      .catch((err) => console.warn("clipboard paste failed", err));
   }
 
   /** Move the terminal element into a pane container and ensure it is running. */
@@ -261,7 +305,10 @@ class TerminalController {
         // Guard: in-flight Channel bytes can arrive after dispose (xterm throws on a
         // disposed Terminal, and the throw happens inside the channel callback).
         if (!this.disposed) {
-          this.term.write(bytes);
+          // Decode ourselves (instead of letting xterm do it) so Arabic can be shaped:
+          // base letters become contextual presentation forms, 1:1, and render connected
+          // under any renderer. Pure ASCII chunks pass through shapeArabicVisual untouched.
+          this.term.write(shapeArabicVisual(this.decoder.decode(bytes, { stream: true })));
           noteOutput(this.sessionId, bytes.length);
         }
       },

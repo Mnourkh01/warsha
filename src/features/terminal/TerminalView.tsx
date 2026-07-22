@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ensureTerminal, getTerminal } from "./controller";
+import { registerTerminalDrop } from "./terminalDrop";
 import { useWorkspaces } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
 import { useSettings } from "../../store/settings";
@@ -35,5 +36,15 @@ export function TerminalView({ sessionId, active }: { sessionId: string; active:
     if (active) getTerminal(sessionId)?.focus();
   }, [active, sessionId]);
 
-  return <div className="term-mount" ref={mountRef} />;
+  // Accept OS file drops like a native terminal: register this pane so a dropped path is
+  // typed into its shell. The highlight class mirrors the chat pane's drop affordance.
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+    return registerTerminalDrop(sessionId, {
+      setOver: (over) => mount.classList.toggle("is-drop-over", over),
+    });
+  }, [sessionId]);
+
+  return <div className="term-mount" data-term-drop={sessionId} ref={mountRef} />;
 }
