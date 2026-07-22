@@ -24,4 +24,5 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tauri-plugin-window-state = "2.4.1"
 parking_lot = "0.12.5"
 tauri-plugin-dialog = "2.7.2"
+tauri-plugin-clipboard-manager = "2.3.2"
 which = "7"
