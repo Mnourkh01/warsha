@@ -10,6 +10,8 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
+  /** Attached image filenames (display only) for a user turn. */
+  images?: string[];
   /** True when this bubble is an error notice, styled accordingly. */
   error?: boolean;
 }

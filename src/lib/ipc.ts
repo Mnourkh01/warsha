@@ -4,9 +4,11 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { CloseRequestedEvent } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { ShellKind } from "./types";
 
 export interface SpawnOpts {
@@ -67,6 +69,8 @@ export interface AgentSendOpts {
   /** Provider conversation id to continue (Claude resume). */
   resume?: string;
   cwd?: string;
+  /** Staged image paths (from `stageChatImage`) to attach to this turn. */
+  images?: string[];
 }
 
 /** Run one headless AI-CLI request; `onChunk` streams raw stdout text. Resolves with
@@ -106,6 +110,58 @@ export async function pickFolder(title?: string): Promise<string | null> {
   return typeof res === "string" ? res : null;
 }
 
+/** Image extensions the chat can attach (must match the Rust ALLOWED_EXT list). */
+export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp"] as const;
+
+export interface StagedImage {
+  /** Absolute (forward-slashed) path of the staged copy, safe for the CLI. */
+  path: string;
+  /** Original filename, shown as the attachment chip label. */
+  name: string;
+}
+
+/** Copy a dropped/picked image into the app's chat-image cache; returns its staged path. */
+export async function stageChatImage(src: string): Promise<StagedImage> {
+  return await invoke<StagedImage>("stage_chat_image", { src });
+}
+
+/** Native image picker (multi-select). Returns chosen absolute paths, or []. */
+export async function pickImages(title?: string): Promise<string[]> {
+  const res = await openDialog({
+    directory: false,
+    multiple: true,
+    title,
+    filters: [{ name: "Images", extensions: [...IMAGE_EXTENSIONS] }],
+  });
+  if (Array.isArray(res)) return res;
+  return typeof res === "string" ? [res] : [];
+}
+
+export interface FileDropEvent {
+  kind: "enter" | "over" | "drop" | "leave";
+  /** Absolute paths being dropped (present on enter/drop). */
+  paths: string[];
+  /** Cursor position in PHYSICAL pixels (divide by devicePixelRatio for CSS coords). */
+  position: { x: number; y: number };
+}
+
+/** OS file drag-and-drop onto the window. Tauri intercepts native file drops (the WebView
+ *  never sees an HTML5 `drop` for real files), so this event is the only way to get them. */
+export function onWebviewFileDrop(handler: (e: FileDropEvent) => void): Promise<UnlistenFn> {
+  return getCurrentWebview().onDragDropEvent((event) => {
+    const p = event.payload as {
+      type: FileDropEvent["kind"];
+      paths?: string[];
+      position?: { x: number; y: number };
+    };
+    handler({
+      kind: p.type,
+      paths: p.paths ?? [],
+      position: p.position ?? { x: 0, y: 0 },
+    });
+  });
+}
+
 /** Native yes/no confirmation. Returns true when the user confirms. */
 export async function confirmDialog(message: string, title?: string): Promise<boolean> {
   return ask(message, { title, kind: "warning" });
@@ -122,6 +178,23 @@ export async function saveState(state: unknown): Promise<void> {
 /** Back up the current state file as state.<label>.bak.json (label sanitized in Rust). */
 export async function sessionStateBackup(label: string): Promise<void> {
   await invoke("session_state_backup", { label });
+}
+
+/** Read the OS clipboard as text. Goes through the Rust clipboard plugin, not the
+ *  WebView `navigator.clipboard` (which WebView2 blocks on read without a prompt UI).
+ *  Returns "" when the clipboard holds no text. */
+export async function clipboardReadText(): Promise<string> {
+  try {
+    return (await readText()) ?? "";
+  } catch {
+    // Clipboard held a non-text payload (e.g. an image), or is empty. Not an error.
+    return "";
+  }
+}
+
+/** Write text to the OS clipboard through the Rust clipboard plugin. */
+export async function clipboardWriteText(text: string): Promise<void> {
+  await writeText(text);
 }
 
 /** Open a link in the SYSTEM browser, never inside the WebView. Terminal output is

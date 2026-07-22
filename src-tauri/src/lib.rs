@@ -2,6 +2,7 @@
 
 mod agent;
 mod commands;
+mod images;
 mod pty;
 mod session;
 mod update;
@@ -24,9 +25,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(PtyManager::default())
         .manage(AgentManager::default())
+        .setup(|app| {
+            // Prune stale chat-image attachments off the main thread so a slow disk never
+            // delays window paint. Best-effort: a cache we cannot clean is not a startup error.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || images::prune(&handle));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::pty_spawn,
             commands::pty_write,
@@ -38,6 +47,7 @@ pub fn run() {
             commands::session_state_backup,
             commands::agent_send,
             commands::agent_cancel,
+            commands::stage_chat_image,
             commands::update_check,
         ])
         .build(tauri::generate_context!())
