@@ -42,11 +42,12 @@ export function SessionTree() {
   const setSettings = useUI((s) => s.setSettings);
   const setNewSession = useUI((s) => s.setNewSession);
   const setSidebar = useUI((s) => s.setSidebar);
+  const sidebarWidth = useUI((s) => s.sidebarWidth);
   const resolved = resolveTheme(theme);
   const t = useStrings();
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
       <div className="sidebar-header">
         <span className="brand">
           <span className="brand-mark">

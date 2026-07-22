@@ -7,7 +7,7 @@ import { useChat } from "./store/chat";
 import { useUI } from "./store/ui";
 import { applySettingsToAll, disposeTerminal, getTerminal } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
-import { agentCancel } from "./lib/ipc";
+import { agentCancel, ptyWrite } from "./lib/ipc";
 import { SHELL_LABELS, type ShellKind } from "./lib/types";
 
 export function shellDefaultName(shell: ShellKind): string {
@@ -96,6 +96,49 @@ export async function restartSession(id: string): Promise<void> {
   useRuntime.getState().setStatus(id, "running");
   useRuntime.getState().clearAttention(id);
   useRuntime.getState().bumpEpoch(id);
+}
+
+/** Windows path -> WSL mount path (C:\a\b -> /mnt/c/a/b). */
+function toWslPath(p: string): string {
+  const m = /^([A-Za-z]):[\\/]?(.*)$/.exec(p);
+  if (!m) return p.replace(/\\/g, "/");
+  return `/mnt/${m[1].toLowerCase()}/${m[2].replace(/\\/g, "/")}`;
+}
+
+/** The line that changes directory in a live shell of this kind, terminated with Enter. */
+function cdCommand(shell: ShellKind, path: string): string {
+  switch (shell.kind) {
+    case "powershell":
+      // Single-quoted + doubled quotes so spaces and quotes in the path are literal.
+      return `Set-Location -LiteralPath '${path.replace(/'/g, "''")}'\r`;
+    case "cmd":
+      // /d also switches drive; quotes cover spaces.
+      return `cd /d "${path}"\r`;
+    case "wsl":
+      return `cd "${toWslPath(path)}"\r`;
+    default:
+      // Best-effort POSIX cd for an unknown custom shell (e.g. Git Bash). Backslashes stay
+      // literal inside double quotes in a POSIX shell, so a Windows `C:\a\b` cd fails there;
+      // forward-slash it. Git Bash accepts `cd "C:/a/b"` and cd is drive-aware.
+      return `cd "${path.replace(/\\/g, "/")}"\r`;
+  }
+}
+
+/**
+ * Point a session at a new folder WITHOUT restarting it. For a terminal session this
+ * types a `cd` into the running shell (scrollback and any running program survive); the
+ * stored cwd is updated too, so a later restart also lands in the new folder. For a chat
+ * session there is no PTY, so only the stored cwd changes and the next message runs there.
+ * A `cd` typed while a foreground program (e.g. an interactive CLI) is running goes to that
+ * program, not the shell - the user quits it first, same as typing `cd` by hand.
+ */
+export function changeSessionFolder(id: string, cwd: string): void {
+  const ws = useWorkspaces.getState();
+  const session = ws.sessions[id];
+  if (!session) return;
+  ws.setSessionCwd(id, cwd);
+  if (session.agent) return; // chat pane: next request uses the new cwd
+  if (getTerminal(id)) void ptyWrite(id, cdCommand(session.shell, cwd)).catch(() => {});
 }
 
 export function newWorkspace(): string {

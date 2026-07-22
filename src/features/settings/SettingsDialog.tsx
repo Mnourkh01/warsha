@@ -12,10 +12,13 @@ import type { ShellKind, ThemeMode } from "../../lib/types";
 
 const THEMES: ThemeMode[] = ["dark", "light", "system"];
 const TERM_THEMES: TerminalTheme[] = ["dark", "light", "match"];
-const SHELLS: { value: ShellKind["kind"]; label: string }[] = [
-  { value: "powershell", label: "PowerShell" },
-  { value: "cmd", label: "Command Prompt" },
-  { value: "wsl", label: "WSL" },
+// Bash is a "custom" shell (Git Bash / WSL bash on PATH), so it carries its full ShellKind
+// here rather than just a kind string, and the dropdown sets the whole object.
+const SHELLS: { value: string; label: string; shell: ShellKind }[] = [
+  { value: "powershell", label: "PowerShell", shell: { kind: "powershell" } },
+  { value: "cmd", label: "Command Prompt", shell: { kind: "cmd" } },
+  { value: "wsl", label: "WSL", shell: { kind: "wsl" } },
+  { value: "bash", label: "Bash", shell: { kind: "custom", program: "bash.exe", args: ["-i", "-l"] } },
 ];
 
 export function SettingsDialog() {
@@ -52,6 +55,14 @@ export function SettingsDialog() {
     applySettingsToAll({ foreground: useSettings.getState().termForeground });
   };
   const fgValue = termForeground ?? (terminalThemeFor(termScheme()).foreground as string);
+  // Map the stored default shell to a dropdown value: bash is a custom shell with a known
+  // program; any other custom shell (legacy) shows the disabled "Custom" entry.
+  const shellValue =
+    defaultShell.kind === "custom"
+      ? defaultShell.program === "bash.exe"
+        ? "bash"
+        : "custom"
+      : defaultShell.kind;
 
   return (
     <div
@@ -161,6 +172,7 @@ export function SettingsDialog() {
             </div>
           </div>
 
+
           <div className="field">
             <div className="field-row">
               <span className="field-label">{t.terminalTextColor}</span>
@@ -183,14 +195,13 @@ export function SettingsDialog() {
             <span className="field-label">{t.defaultShellLabel}</span>
             <select
               className="select"
-              value={defaultShell.kind}
+              value={shellValue}
               onChange={(e) => {
-                const kind = e.target.value as ShellKind["kind"];
-                if (kind === "custom") return; // display-only entry, not a choice
-                useSettings.getState().setDefaultShell({ kind } as ShellKind);
+                const pick = SHELLS.find((sh) => sh.value === e.target.value);
+                if (pick) useSettings.getState().setDefaultShell(pick.shell);
               }}
             >
-              {defaultShell.kind === "custom" && (
+              {defaultShell.kind === "custom" && shellValue === "custom" && (
                 <option value="custom" disabled>
                   {t.customShell(defaultShell.program)}
                 </option>

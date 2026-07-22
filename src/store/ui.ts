@@ -7,6 +7,8 @@ interface UIState {
   newSessionOpen: boolean;
   shortcutsOpen: boolean;
   sidebarOpen: boolean;
+  /** Sidebar width in px (drag-resizable). Not persisted, resets on restart. */
+  sidebarWidth: number;
   /** Session whose pane fills the whole grid; null = normal grid. */
   maximizedSessionId: string | null;
   /** Find bar over the ACTIVE session's pane. */
@@ -16,6 +18,7 @@ interface UIState {
   setNewSession: (v: boolean) => void;
   setShortcuts: (v: boolean) => void;
   setSidebar: (v: boolean) => void;
+  setSidebarWidth: (w: number) => void;
   toggleSidebar: () => void;
   setMaximized: (id: string | null) => void;
   toggleMaximized: (id: string) => void;
@@ -28,6 +31,7 @@ export const useUI = create<UIState>((set) => ({
   newSessionOpen: false,
   shortcutsOpen: false,
   sidebarOpen: true,
+  sidebarWidth: 264,
   maximizedSessionId: null,
   findOpen: false,
   setPalette: (paletteOpen) => set({ paletteOpen }),
@@ -35,6 +39,8 @@ export const useUI = create<UIState>((set) => ({
   setNewSession: (newSessionOpen) => set({ newSessionOpen }),
   setShortcuts: (shortcutsOpen) => set({ shortcutsOpen }),
   setSidebar: (sidebarOpen) => set({ sidebarOpen }),
+  // Clamp so the sidebar can never be dragged uselessly narrow or eat the whole window.
+  setSidebarWidth: (w) => set({ sidebarWidth: Math.max(200, Math.min(520, Math.round(w))) }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setMaximized: (maximizedSessionId) => set({ maximizedSessionId }),
   toggleMaximized: (id) =>

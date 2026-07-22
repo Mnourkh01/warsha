@@ -1,11 +1,12 @@
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { FolderInput, Maximize2, Minimize2, X } from "lucide-react";
 import { useWorkspaces } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
 import { useUI } from "../../store/ui";
 import { TerminalView } from "../terminal/TerminalView";
 import { FindBar } from "../terminal/FindBar";
 import { ChatPane } from "../chat/ChatPane";
-import { closeSession, openSession } from "../../actions";
+import { changeSessionFolder, closeSession, openSession } from "../../actions";
+import { pickFolder } from "../../lib/ipc";
 import { SessionIcon } from "../icons";
 import { useStrings } from "../../lib/i18n";
 
@@ -22,6 +23,15 @@ export function Pane({ sessionId }: { sessionId: string }) {
 
   const statusLabel =
     status === "running" ? t.statusRunning : status === "exited" ? t.statusExited : t.statusIdle;
+
+  const changeFolder = async () => {
+    try {
+      const dir = await pickFolder(t.changeFolderTitle(session.name));
+      if (dir) changeSessionFolder(sessionId, dir);
+    } catch (e) {
+      console.warn("folder picker failed", e);
+    }
+  };
 
   return (
     <div className={`pane${active ? " active" : ""}`} onMouseDown={() => openSession(sessionId)}>
@@ -43,6 +53,17 @@ export function Pane({ sessionId }: { sessionId: string }) {
           />
         )}
         <span className="pane-actions">
+          <button
+            className="icon-btn sm"
+            title={t.changeFolder}
+            aria-label={t.changeFolderNamed(session.name)}
+            onClick={(e) => {
+              e.stopPropagation();
+              void changeFolder();
+            }}
+          >
+            <FolderInput size={14} />
+          </button>
           <button
             className="icon-btn sm"
             title={maximized ? t.restorePane : t.maximizePane}

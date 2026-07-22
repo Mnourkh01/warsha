@@ -38,6 +38,20 @@
   border-inline-end: 1px solid var(--border);
 }
 
+/* Drag handle to resize the sidebar (same feel as the terminal pane separators). */
+.sidebar-resizer {
+  flex: none;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.12s ease;
+  z-index: 5;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer:active {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -355,6 +369,18 @@
   position: absolute;
   inset: 0;
   padding: 4px 2px 2px 6px;
+}
+/* File dragged over a terminal pane: a native terminal accepts the drop and types the path.
+   Inset dashed accent ring echoes the chat pane's drop affordance without shifting layout. */
+.term-mount.is-drop-over::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: 4;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  pointer-events: none;
 }
 
 /* Find bar over the active pane (Ctrl+Shift+F) */
@@ -820,6 +846,7 @@
 /* ---- AI chat pane (the Arabic reading surface) ------------------------------- */
 
 .chat-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -978,6 +1005,93 @@
 }
 .chat-send:disabled {
   opacity: 0.4;
+}
+.chat-attach {
+  flex: none;
+  height: 34px;
+  width: 34px;
+}
+
+/* Image attachments: staged chips above the input, and a drop overlay over the pane. */
+.chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+.chat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 4px 4px 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-dim);
+  unicode-bidi: plaintext;
+}
+.chat-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--text-faint);
+}
+.chat-chip-remove:hover {
+  color: var(--text);
+  background: var(--border);
+}
+.chat-attach-error {
+  padding: 6px 12px 0;
+  font-size: 12px;
+  color: var(--danger);
+  unicode-bidi: plaintext;
+}
+.chat-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+  font-size: 13.5px;
+  pointer-events: none;
+}
+.chat-msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.chat-img-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 7px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
 }
 
 /* ---- update toast (bottom corner, dismissible, one per launch) --------------- */

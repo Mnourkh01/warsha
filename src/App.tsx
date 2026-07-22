@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ArrowDownToLine, PanelLeftOpen, X } from "lucide-react";
 import { SessionTree } from "./features/tree/SessionTree";
 import { Workspace } from "./features/workspace/Workspace";
@@ -19,6 +19,39 @@ import { checkForUpdate, onPtyExit, openExternal, type UpdateInfo } from "./lib/
 // Browser accelerators WebView2 would otherwise hijack from app chrome:
 // print, find, view-source, save, downloads, find-next.
 const BROWSER_CHORDS = new Set(["p", "f", "u", "s", "j", "g"]);
+
+// Drag handle between the sidebar and the workspace. The sidebar is a flex sibling (not part
+// of the terminal panel group), so it gets its own handle. Width comes from the pointer's
+// distance to the app-shell's inline-start edge, which stays correct after a dir=rtl flip.
+function SidebarResizer() {
+  const setWidth = useUI((s) => s.setSidebarWidth);
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    const shell = handle.closest(".app-shell") as HTMLElement | null;
+    const rtl = document.documentElement.dir === "rtl";
+    handle.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      if (!shell) return;
+      const rect = shell.getBoundingClientRect();
+      setWidth(rtl ? rect.right - ev.clientX : ev.clientX - rect.left);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <div
+      className="sidebar-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      onPointerDown={onPointerDown}
+    />
+  );
+}
 
 // Physical keys WebView2 treats as zoom chords with Ctrl (any shift state).
 const ZOOM_CODES = new Set(["Equal", "Minus", "Digit0", "NumpadAdd", "NumpadSubtract", "Numpad0"]);
@@ -178,7 +211,10 @@ export default function App() {
   return (
     <div className="app-shell">
       {sidebarOpen ? (
-        <SessionTree />
+        <>
+          <SessionTree />
+          <SidebarResizer />
+        </>
       ) : (
         <button
           className="sidebar-show"

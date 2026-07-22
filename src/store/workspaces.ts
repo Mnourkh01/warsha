@@ -46,6 +46,7 @@ interface WsState extends WsPersist {
   ) => string | null;
   removeSession: (id: string) => void;
   renameSession: (id: string, name: string) => void;
+  setSessionCwd: (id: string, cwd: string | undefined) => void;
   setActiveSession: (id: string) => void;
   reorderSession: (sessionId: string, toIndex: number) => void;
   moveSessionToWorkspace: (sessionId: string, targetWsId: string) => boolean;
@@ -168,6 +169,14 @@ export const useWorkspaces = create<WsState>((set, get) => {
         const session = s.sessions[id];
         if (!session) return s;
         return { sessions: { ...s.sessions, [id]: { ...session, name } } };
+      }),
+
+    setSessionCwd: (id, cwd) =>
+      set((s) => {
+        const session = s.sessions[id];
+        if (!session) return s;
+        const next = cwd && cwd.trim() ? cwd : undefined;
+        return { sessions: { ...s.sessions, [id]: { ...session, cwd: next } } };
       }),
 
     setActiveSession: (id) => {
