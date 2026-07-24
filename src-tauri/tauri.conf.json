@@ -16,7 +16,12 @@
         "width": 1280,
         "height": 800,
         "minWidth": 720,
-        "minHeight": 480
+        "minHeight": 480,
+        "decorations": false,
+        "transparent": true,
+        "windowEffects": {
+          "effects": ["mica"]
+        }
       }
     ],
     "security": {
@@ -27,6 +32,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,5 +40,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdEMDVBRkYxMzVENzUyQQpSV1FxZFYwVC8xclFCK2Eyd3hMcThnUVNQRVM3eG9wK1I1VWRjdElvQUJSUytBSmwxRi92OC94Lwo=",
+      "endpoints": [
+        "https://github.com/Mnourkh01/warsha/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

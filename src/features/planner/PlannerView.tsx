@@ -301,11 +301,7 @@ export function PlannerView() {
           {copied ? <ClipboardCheck size={14} /> : <FileDown size={14} />}
           {copied ? t.exportCopied : t.exportMarkdown}
         </button>
-        <button
-          className="btn"
-          disabled={doc.nodes.length === 0}
-          onClick={() => setPlanSend(true)}
-        >
+        <button className="btn" onClick={() => setPlanSend(true)}>
           <Send size={14} />
           {t.sendToAi}
         </button>
@@ -358,6 +354,7 @@ export function PlannerView() {
         simData={sim.data}
         simError={sim.error}
         onRerunSim={() => void doSim()}
+        onAskAi={() => setPlanSend(true)}
         sidePanel={
           reviewOpen ? (
             <ReviewPanel

@@ -1,31 +1,62 @@
-/* Warsha component styles - token-driven, one spacing rhythm, flat surfaces. */
+/* Warsha component styles - token-driven, one spacing rhythm, layered depth. */
 
-.app-shell {
+.app-frame {
   display: flex;
+  flex-direction: column;
   height: 100%;
   width: 100%;
   overflow: hidden;
 }
 
-.sidebar-show {
-  position: absolute;
-  top: 8px;
-  inset-inline-start: 8px;
-  z-index: 20;
+.app-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ---- title bar (frameless window) ---- */
+.titlebar {
+  height: var(--titlebar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline-start: 6px;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+/* The brand must not swallow drag mousedowns - let them fall through to the bar. */
+.titlebar .brand {
+  pointer-events: none;
+  padding-inline-start: 2px;
+}
+.tb-controls {
+  display: flex;
+  align-self: stretch;
+  margin-inline-start: 4px;
+}
+.tb-btn {
+  width: 46px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
   color: var(--text-dim);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  cursor: pointer;
+  background: transparent;
+  border: none;
+  cursor: default;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
 }
-.sidebar-show:hover {
+.tb-btn:hover {
+  background: var(--bg-elev);
   color: var(--text);
-  background: var(--bg-elev-2);
+}
+/* Windows convention: close is the one loud control. */
+.tb-btn.tb-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
 }
 
 /* ---- sidebar ---- */
@@ -34,8 +65,16 @@
   min-width: 264px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
+  background: var(--bg-chrome);
   border-inline-end: 1px solid var(--border);
+}
+.sidebar-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding-inline-start: 4px;
 }
 
 /* Drag handle to resize the sidebar (same feel as the terminal pane separators). */
@@ -202,6 +241,7 @@
 }
 
 .tree-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -211,10 +251,64 @@
   color: var(--text);
   cursor: pointer;
   user-select: none;
-  transition: background 0.1s ease;
+  transition: background var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
 .tree-row:hover {
   background: var(--bg-elev);
+}
+/* Insertion line while dragging a session over a row (drop lands before it). */
+.tree-row.drop-before::after {
+  content: "";
+  position: absolute;
+  inset-inline: 6px;
+  top: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+/* Breathing room: groups separate, session rows get a hair of air between them. */
+.ws-group {
+  margin-block-end: 6px;
+}
+.ws-sessions-inner,
+.tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-block: 2px;
+}
+.tpl-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Collapse/expand animates via the 0fr grid-row trick; visibility drops the hidden
+   rows out of the tab order once the motion ends. */
+.ws-sessions {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-med) var(--ease-out);
+}
+.ws-sessions.collapsed {
+  grid-template-rows: 0fr;
+}
+.ws-sessions-inner {
+  overflow: hidden;
+  min-height: 0;
+  visibility: visible;
+  transition:
+    visibility 0s linear,
+    padding var(--dur-med) var(--ease-out);
+}
+/* Padding must animate away too, or a sliver survives the 0fr collapse. */
+.ws-sessions.collapsed .ws-sessions-inner {
+  visibility: hidden;
+  padding-block: 0;
+  transition:
+    visibility 0s linear var(--dur-med),
+    padding var(--dur-med) var(--ease-out);
 }
 .tree-row.selected {
   background: var(--accent-soft);
@@ -276,8 +370,75 @@
   padding: 0 4px;
   flex: none;
 }
+/* Session + template rows: two-line cards. Icon sits in a tinted badge tile with a
+   presence dot on its corner (Discord-style); the name owns the full row width. */
 .session-row {
-  padding-inline-start: 18px;
+  height: 40px;
+  padding-inline-start: 24px;
+  gap: 8px;
+}
+.row-badge {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--session-tint, var(--accent)) 14%, transparent);
+  color: var(--text-dim);
+  flex: none;
+}
+.row-presence {
+  position: absolute;
+  inset-inline-end: -3px;
+  inset-block-end: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  border: 2px solid var(--bg-panel);
+}
+.row-badge[data-status="running"] .row-presence {
+  background: var(--ok);
+}
+.row-badge[data-status="exited"] .row-presence {
+  background: var(--danger);
+}
+.row-lines {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.25;
+}
+.row-lines .name {
+  flex: none;
+}
+.row-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Host-shell monogram: tiny mono chip, terminal-native ("PS", "WSL", "BASH"). */
+.shell-chip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  flex: none;
+  line-height: 1.5;
 }
 
 .workspace-empty {
@@ -371,30 +532,29 @@
   }
 }
 
-/* Per-workspace attention count, visible even when the workspace is collapsed. */
-.ws-attention {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 10px;
+.ws-count.full {
+  color: var(--tint-orange);
   font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
 }
+/* Row actions float OVER the row end on hover instead of reserving layout width,
+   so long workspace/session names keep the full row for themselves. */
 .row-actions {
+  position: absolute;
+  inset-inline-end: 3px;
   display: inline-flex;
   gap: 1px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
   opacity: 0;
-  transition: opacity 0.1s ease;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) ease;
 }
 .tree-row:hover .row-actions,
 .tree-row:focus-within .row-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 /* ---- workspace + panes ---- */
@@ -412,6 +572,8 @@
   background: var(--bg-app);
   overflow: hidden;
 }
+/* The active pane wears a soft accent ring - input focus must be findable at a
+   glance in a 4-pane grid. */
 .pane.active {
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 65%, transparent);
 }
@@ -438,15 +600,24 @@
   white-space: nowrap;
   color: var(--text);
 }
+/* Actions stay quiet until the header is hovered or reached by keyboard. */
 .pane-actions {
   margin-inline-start: auto;
   display: inline-flex;
   gap: 1px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
 }
+.pane-header:hover .pane-actions,
+.pane-header:focus-within .pane-actions {
+  opacity: 1;
+}
+/* The terminal sits in a sunken well - one step deeper than the pane chrome. */
 .pane-body {
   flex: 1;
   min-height: 0;
   position: relative;
+  background: var(--bg-sunken);
 }
 .term-mount {
   position: absolute;
@@ -476,10 +647,12 @@
   align-items: center;
   gap: 2px;
   padding: 3px 4px;
-  background: var(--bg-elev);
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-2);
+  animation: surface-in var(--dur-fast) var(--ease-out);
 }
 .find-input {
   width: 160px;
@@ -548,20 +721,40 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, #000 42%, transparent);
+  background: color-mix(in srgb, #000 38%, transparent);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 12vh;
   z-index: 50;
+  animation: overlay-in var(--dur-fast) ease-out;
+}
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+/* Floating surfaces enter with one shared spring-less pop: fade + 1.5% scale. */
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(4px);
+  }
+}
+.palette,
+.dialog,
+.picker {
+  animation: surface-in var(--dur-med) var(--ease-out);
 }
 .palette {
   width: 560px;
   max-width: calc(100vw - 32px);
-  background: var(--bg-elev);
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-3);
   overflow: hidden;
 }
 .palette-input {
@@ -611,10 +804,11 @@
 .dialog {
   width: 440px;
   max-width: calc(100vw - 32px);
-  background: var(--bg-elev);
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-3);
 }
 .dialog-header {
   display: flex;
@@ -745,10 +939,11 @@
 .picker {
   width: 520px;
   max-width: calc(100vw - 32px);
-  background: var(--bg-elev);
+  background: var(--bg-glass);
+  backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-3);
   overflow: hidden;
 }
 .picker-head {
@@ -1194,12 +1389,20 @@
   align-items: center;
   gap: 10px;
   padding: 8px 10px 8px 14px;
-  background: var(--bg-elev);
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
+  box-shadow: var(--shadow-2);
   font-size: 13px;
   color: var(--text);
+  animation: toast-in var(--dur-med) var(--ease-out);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 .update-toast .update-btn {
   display: inline-flex;

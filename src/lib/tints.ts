@@ -20,3 +20,10 @@ export function nextTint(current: Tint | undefined): Tint | undefined {
 export function tintClasses(tint: Tint | undefined): string {
   return tint ? ` tinted tint-${tint}` : "";
 }
+
+/** Default tint for a NEW session: the first color its workspace is not using yet, so
+ *  neighbors stay tellable-apart; when all seven are taken, cycle by position. */
+export function autoTint(taken: Array<Tint | undefined>, seed: number): Tint {
+  const used = new Set(taken.filter((t): t is Tint => t !== undefined));
+  return TINTS.find((t) => !used.has(t)) ?? TINTS[seed % TINTS.length];
+}

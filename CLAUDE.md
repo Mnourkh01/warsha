@@ -31,6 +31,15 @@ cargo test              # (in src-tauri) Rust unit tests
 pnpm lint               # tsc --noEmit (typecheck only; eslint is not configured)
 ```
 
+**Release (auto-updater).** Releases MUST be signed or installed apps cannot auto-update.
+Before `pnpm tauri build`, set `TAURI_SIGNING_PRIVATE_KEY=C:\Users\mnour\.tauri\warsha.key`
+and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD=` (empty). Bump the version in `package.json`,
+`src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` first. After the build, run
+`pnpm release:updater` and upload ALL THREE assets to the GitHub release: the
+`*-setup.exe`, the `*-setup.exe.sig`, and `latest.json`. The app checks
+`releases/latest/download/latest.json` on launch and from Settings. The private key
+never enters the repo; losing it means shipping a new public key before updates work.
+
 ## Conventions
 
 - **Layered architecture** (this is tool CRUD + I/O, not a deep domain). Dependencies point

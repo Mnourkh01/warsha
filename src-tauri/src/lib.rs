@@ -5,7 +5,6 @@ mod headless;
 mod pty;
 mod session;
 mod shells;
-mod update;
 
 use pty::PtyManager;
 use tauri::{Manager, RunEvent};
@@ -25,7 +24,19 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        // Window geometry persistence. DECORATIONS is excluded: the frameless custom
+        // title bar (tauri.conf.json decorations:false) must win over any saved state,
+        // or a state file from a decorated build re-adds the native title bar forever.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         .manage(PtyManager::default())
         .invoke_handler(tauri::generate_handler![
             commands::pty_spawn,
@@ -41,7 +52,7 @@ pub fn run() {
             commands::plan_file_save,
             commands::plan_draft_read,
             commands::plan_draft_consume,
-            commands::update_check,
+            commands::plan_spec_save,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

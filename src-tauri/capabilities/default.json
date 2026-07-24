@@ -8,11 +8,18 @@
     "core:window:allow-destroy",
     "core:window:allow-set-theme",
     "core:window:allow-theme",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
     "opener:default",
     "opener:allow-reveal-item-in-dir",
     "window-state:default",
     "dialog:default",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

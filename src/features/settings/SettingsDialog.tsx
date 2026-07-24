@@ -1,11 +1,13 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, type TerminalTheme } from "../../store/settings";
 import { useUI } from "../../store/ui";
 import { applySettingsToAll } from "../terminal/controller";
 import { terminalThemeFor } from "../terminal/theme";
 import { termScheme } from "../../actions";
 import { pickFolder } from "../../lib/ipc";
+import { checkForUpdate, installUpdate } from "../../lib/updater";
 import { DialogTrap } from "../../lib/dialog-trap";
 import { useStrings } from "../../lib/i18n";
 import { SHELL_TYPES } from "../../lib/sessionTypes";
@@ -37,8 +39,41 @@ export function SettingsDialog() {
   const t = useStrings();
   const boxRef = useRef<HTMLDivElement>(null);
   const [pickError, setPickError] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState("");
+  const [upd, setUpd] = useState<{
+    phase: "idle" | "checking" | "none" | "found" | "installing" | "error";
+    version?: string;
+    progress?: number | null;
+  }>({ phase: "idle" });
+
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => {
+        /* running outside Tauri (vitest/browser) */
+      });
+  }, []);
 
   if (!open) return null;
+
+  const checkNow = async () => {
+    setUpd({ phase: "checking" });
+    try {
+      const info = await checkForUpdate();
+      setUpd(info ? { phase: "found", version: info.version } : { phase: "none" });
+    } catch (e) {
+      console.warn("update check failed", e);
+      setUpd({ phase: "error" });
+    }
+  };
+
+  const installNow = () => {
+    setUpd((u) => ({ ...u, phase: "installing", progress: null }));
+    installUpdate((p) => setUpd((u) => ({ ...u, progress: p }))).catch((e) => {
+      console.warn("update install failed", e);
+      setUpd({ phase: "error" });
+    });
+  };
 
   const setFont = (n: number) => {
     useSettings.getState().setFontSize(n);
@@ -231,6 +266,41 @@ export function SettingsDialog() {
               ) : null}
             </div>
             {pickError && <div className="picker-error">{pickError}</div>}
+          </div>
+
+          <div className="field">
+            <div className="field-row">
+              <span className="field-label">
+                {t.updatesLabel}{" "}
+                {appVersion && <span className="field-hint">{t.currentVersion(appVersion)}</span>}
+              </span>
+              {upd.phase === "found" && upd.version ? (
+                <button className="btn-ghost" onClick={installNow}>
+                  {t.updateTo(upd.version)}
+                </button>
+              ) : (
+                <button
+                  className="btn-ghost"
+                  disabled={upd.phase === "checking" || upd.phase === "installing"}
+                  onClick={() => void checkNow()}
+                >
+                  {t.updateCheckNow}
+                </button>
+              )}
+            </div>
+            {upd.phase !== "idle" && upd.phase !== "found" && (
+              <div className="field-hint" aria-live="polite">
+                {upd.phase === "checking"
+                  ? t.updateChecking
+                  : upd.phase === "none"
+                    ? t.updateUpToDate
+                    : upd.phase === "installing"
+                      ? upd.progress === 100
+                        ? t.updateInstalling
+                        : t.updateDownloading(upd.progress ?? null)
+                      : t.updateFailed}
+              </div>
+            )}
           </div>
         </div>
       </div>

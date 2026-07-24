@@ -7,7 +7,6 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::pty::{PtyManager, SpawnOpts};
 use crate::session;
-use crate::update;
 
 #[derive(Debug, Clone, Serialize)]
 struct ExitPayload {
@@ -102,6 +101,30 @@ const MAX_PLAN_MD_BYTES: usize = 2 * 1024 * 1024;
 #[tauri::command(async)]
 pub fn plan_file_save(dir: String, markdown: String) -> Result<String, String> {
     plan_file_save_at(std::path::Path::new(&dir), &markdown)
+}
+
+/// Format spec dropped next to the plan so AIs WITHOUT a skill system (codex, gemini)
+/// can learn the draft contract; the ask-for-a-plan prompt points them at it.
+const PLAN_SPEC: &str = "BLUEPRINT.md";
+const MAX_PLAN_SPEC_BYTES: usize = 256 * 1024;
+
+/// Write `<dir>/.warsha/BLUEPRINT.md` (content is a frontend constant; the file name
+/// is fixed here so the WebView can never choose an arbitrary target).
+#[tauri::command(async)]
+pub fn plan_spec_save(dir: String, spec: String) -> Result<(), String> {
+    if spec.len() > MAX_PLAN_SPEC_BYTES {
+        return Err("spec too large".to_string());
+    }
+    let base = std::path::Path::new(&dir);
+    if !base.is_dir() {
+        return Err(format!("project folder does not exist: {}", base.display()));
+    }
+    let folder = base.join(PLAN_DIR);
+    std::fs::create_dir_all(&folder).map_err(|e| format!("create {PLAN_DIR} failed: {e}"))?;
+    std::fs::write(folder.join(PLAN_SPEC), spec.as_bytes()).map_err(|e| {
+        tracing::warn!(error = %e, "write blueprint spec failed");
+        format!("write spec failed: {e}")
+    })
 }
 
 /// The AI-to-canvas channel: an AI CLI writes a whole-plan JSON here, the Blueprint
@@ -206,6 +229,16 @@ mod tests {
     }
 
     #[test]
+    fn plan_spec_save_writes_the_fixed_file() {
+        let dir = test_dir("spec");
+        plan_spec_save(dir.to_string_lossy().into_owned(), "# format".into()).expect("save");
+        let body = std::fs::read_to_string(dir.join(PLAN_DIR).join(PLAN_SPEC)).expect("read");
+        assert_eq!(body, "# format");
+        assert!(plan_spec_save("Z:\\definitely\\missing".into(), "x".into()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn plan_draft_roundtrip_reads_then_consumes() {
         let dir = test_dir("draft");
         let folder = dir.join(PLAN_DIR);
@@ -234,11 +267,4 @@ mod tests {
         assert!(plan_file_save_at(&dir, &big).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
-}
-
-/// Check GitHub for a newer release (via the user's gh CLI). None = up to date or
-/// cannot check; the frontend stays silent either way.
-#[tauri::command(async)]
-pub fn update_check() -> Option<update::UpdateInfo> {
-    update::check()
 }

@@ -6,25 +6,20 @@ import {
   FolderPlus,
   Layers,
   LayoutTemplate,
-  Moon,
   PaintBucket,
-  PanelLeftClose,
   Pencil,
   Plus,
   RotateCcw,
-  Settings,
-  Sun,
   Trash2,
   Workflow,
   X,
 } from "lucide-react";
 import { MAX_PER_WS, useWorkspaces, type Workspace } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
-import { useSettings } from "../../store/settings";
 import { useTemplates } from "../../store/templates";
 import { useUI } from "../../store/ui";
-import { resolveTheme } from "../../lib/theme";
 import { nextTint, tintClasses } from "../../lib/tints";
+import type { ShellKind } from "../../lib/types";
 import { confirmDialog, pickFolder } from "../../lib/ipc";
 import {
   closeSession,
@@ -36,33 +31,44 @@ import {
   restartSession,
   switchWorkspace,
 } from "../../actions";
-import { SessionIcon, WarshaMark } from "../icons";
+import { SessionIcon } from "../icons";
 import { useStrings } from "../../lib/i18n";
 
 const DND = "text/warsha-session";
+
+// Host-shell monogram for the row sub-line ("PS Running"): the icon tile already names
+// the session type, so the missing information is WHICH shell it runs inside.
+function shellMonogram(shell: ShellKind | undefined): string {
+  switch (shell?.kind) {
+    case "powershell":
+      return "PS";
+    case "cmd":
+      return "CMD";
+    case "wsl":
+      return "WSL";
+    case "custom": {
+      const prog = (shell.program ?? "").toLowerCase();
+      if (prog.includes("bash")) return "BASH";
+      if (prog.includes("ssh")) return "SSH";
+      return "SH";
+    }
+    default:
+      return "PS";
+  }
+}
 
 export function SessionTree() {
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
   const activeSessionId = useWorkspaces((s) => s.activeSessionId);
-  const theme = useSettings((s) => s.theme);
-  const setTheme = useSettings((s) => s.setTheme);
-  const setSettings = useUI((s) => s.setSettings);
   const setNewSession = useUI((s) => s.setNewSession);
-  const setSidebar = useUI((s) => s.setSidebar);
   const sidebarWidth = useUI((s) => s.sidebarWidth);
-  const resolved = resolveTheme(theme);
   const t = useStrings();
 
   return (
     <aside className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
       <div className="sidebar-header">
-        <span className="brand">
-          <span className="brand-mark">
-            <WarshaMark size={14} />
-          </span>
-          Warsha
-        </span>
+        <span className="sidebar-title">{t.workspacesGroup}</span>
         <span className="spacer" />
         <button
           className="icon-btn"
@@ -79,30 +85,6 @@ export function SessionTree() {
           onClick={() => setNewSession(true)}
         >
           <Plus size={16} />
-        </button>
-        <button
-          className="icon-btn"
-          title={t.toggleTheme}
-          aria-label={t.toggleThemeAria}
-          onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
-        >
-          {resolved === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
-        <button
-          className="icon-btn"
-          title={t.settings}
-          aria-label={t.settings}
-          onClick={() => setSettings(true)}
-        >
-          <Settings size={16} />
-        </button>
-        <button
-          className="icon-btn"
-          title={t.hideSidebar}
-          aria-label={t.hideSidebarAria}
-          onClick={() => setSidebar(false)}
-        >
-          <PanelLeftClose size={16} />
         </button>
       </div>
 
@@ -133,6 +115,7 @@ function TemplatesSection() {
   return (
     <div className="tpl-section">
       <div className="tree-group-label">{t.templatesGroup}</div>
+      <div className="tpl-list">
       {templates.map((tpl) => (
         <div
           key={tpl.id}
@@ -149,12 +132,13 @@ function TemplatesSection() {
             }
           }}
         >
-          <span className="twist" />
-          <span className="row-icon">
-            <LayoutTemplate size={14} />
+          <span className="row-badge">
+            <LayoutTemplate size={15} />
           </span>
-          <span className="name bidi-auto">{tpl.name}</span>
-          <span className="ws-count">{tpl.sessions.length}</span>
+          <span className="row-lines">
+            <span className="name bidi-auto">{tpl.name}</span>
+            <span className="row-sub">{t.templateSessions(tpl.sessions.length)}</span>
+          </span>
           <span className="row-actions" onClick={(e) => e.stopPropagation()}>
             <button
               className="icon-btn sm"
@@ -173,6 +157,7 @@ function TemplatesSection() {
           </span>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -222,7 +207,7 @@ function WorkspaceItem({
   };
 
   return (
-    <div>
+    <div className="ws-group">
       <div
         className={`tree-row ws-row${active ? " active-ws" : ""}${dropInto ? " drop-into" : ""}`}
         role="button"
@@ -296,15 +281,18 @@ function WorkspaceItem({
         )}
         {attentionCount > 0 && (
           <span
-            className="ws-attention"
+            className="attention-dot"
             role="img"
             aria-label={t.sessionsNeedAttention(attentionCount)}
             title={t.sessionsNeedAttention(attentionCount)}
-          >
-            {attentionCount}
-          </span>
+          />
         )}
-        <span className="ws-count">{ws.sessionIds.length}/{MAX_PER_WS}</span>
+        <span
+          className={`ws-count${full ? " full" : ""}`}
+          title={full ? t.workspaceFull(MAX_PER_WS) : undefined}
+        >
+          {ws.sessionIds.length}
+        </span>
         {!editing && (
           <span className="row-actions" onClick={(e) => e.stopPropagation()}>
             <button
@@ -377,10 +365,17 @@ function WorkspaceItem({
         )}
       </div>
 
-      {!collapsed &&
-        ws.sessionIds.map((id) => (
-          <SessionRow key={id} id={id} active={id === activeSessionId} />
-        ))}
+      {/* Always mounted so collapse can animate; the inner list hides via 0fr rows.
+          An empty workspace renders no well at all. */}
+      {ws.sessionIds.length > 0 && (
+        <div className={`ws-sessions${collapsed ? " collapsed" : ""}`} aria-hidden={collapsed}>
+          <div className="ws-sessions-inner">
+            {ws.sessionIds.map((id) => (
+              <SessionRow key={id} id={id} active={id === activeSessionId} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -394,6 +389,7 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
   const t = useStrings();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [dropBefore, setDropBefore] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -410,7 +406,7 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
 
   return (
     <div
-      className={`tree-row session-row${active ? " selected" : ""}${tintClasses(session.tint)}`}
+      className={`tree-row session-row${active ? " selected" : ""}${dropBefore ? " drop-before" : ""}${tintClasses(session.tint)}`}
       role="button"
       tabIndex={0}
       onClick={() => openSession(id)}
@@ -427,9 +423,14 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
         e.dataTransfer.effectAllowed = "move";
       }}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes(DND)) e.preventDefault();
+        if (e.dataTransfer.types.includes(DND)) {
+          e.preventDefault();
+          setDropBefore(true);
+        }
       }}
+      onDragLeave={() => setDropBefore(false)}
       onDrop={(e) => {
+        setDropBefore(false);
         const src = e.dataTransfer.getData(DND);
         if (!src || src === id) return;
         e.preventDefault();
@@ -443,15 +444,16 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
       }}
       title={session.name}
     >
-      <span className="twist" />
-      <SessionIcon typeId={session.typeId} size={18} />
-      <span
-        className={`status-dot ${status ?? "idle"}`}
-        role="img"
-        aria-label={
-          status === "running" ? t.statusRunning : status === "exited" ? t.statusExited : t.statusIdle
-        }
-      />
+      <span className="row-badge" data-status={status ?? "idle"}>
+        <SessionIcon typeId={session.typeId} size={16} />
+        <span
+          className="row-presence"
+          role="img"
+          aria-label={
+            status === "running" ? t.statusRunning : status === "exited" ? t.statusExited : t.statusIdle
+          }
+        />
+      </span>
       {editing ? (
         <input
           ref={inputRef}
@@ -469,7 +471,13 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
           }}
         />
       ) : (
-        <span className="name bidi-auto">{session.name}</span>
+        <span className="row-lines">
+          <span className="name bidi-auto">{session.name}</span>
+          <span className="row-sub">
+            <span className="shell-chip">{shellMonogram(session.shell)}</span>
+            {status === "running" ? t.statusRunning : status === "exited" ? t.statusExited : t.statusIdle}
+          </span>
+        </span>
       )}
       {attention && !editing && (
         <span

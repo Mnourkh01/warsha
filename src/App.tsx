@@ -1,6 +1,7 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowDownToLine, PanelLeftOpen, X } from "lucide-react";
+import { ArrowDownToLine, X } from "lucide-react";
 import { SessionTree } from "./features/tree/SessionTree";
+import { TitleBar } from "./features/titlebar/TitleBar";
 import { Workspace } from "./features/workspace/Workspace";
 import { CommandPalette } from "./features/command-palette/CommandPalette";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
@@ -15,14 +16,18 @@ import { applySettingsToAll, getTerminal } from "./features/terminal/controller"
 import { noteExit } from "./features/terminal/attention";
 import { useStrings } from "./lib/i18n";
 import {
-  checkForUpdate,
   onPtyExit,
   onWindowThemeChanged,
   openExternal,
   setWindowTheme,
   windowTheme,
-  type UpdateInfo,
 } from "./lib/ipc";
+import {
+  checkForUpdate,
+  installUpdate,
+  RELEASES_URL,
+  type AvailableUpdate,
+} from "./lib/updater";
 
 // Browser accelerators WebView2 would otherwise hijack from app chrome:
 // print, find, view-source, save, downloads, find-next.
@@ -69,7 +74,15 @@ export default function App() {
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const sidebarOpen = useUI((s) => s.sidebarOpen);
   const t = useStrings();
-  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
+  const [updatePhase, setUpdatePhase] = useState<"offer" | "installing" | "error">("offer");
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+
+  // Transparent-window styling only applies inside Tauri; a plain browser (tests,
+  // Vite dev without the shell) keeps the opaque page background.
+  useEffect(() => {
+    if ("__TAURI_INTERNALS__" in window) document.documentElement.classList.add("in-tauri");
+  }, []);
 
   // Keep <html data-theme> + terminals synced with the app theme. "System" must go through
   // the Tauri window API: wry pins the WebView2 color scheme to the window theme, so
@@ -133,12 +146,16 @@ export default function App() {
   }, []);
 
   // One update check per launch, delayed so it never competes with session restore.
-  // Silent on every failure path (no gh, offline, private-repo auth) by design.
+  // Silent on every failure path (offline, endpoint missing) by design; the settings
+  // dialog has the loud, user-initiated check.
   useEffect(() => {
     const timer = setTimeout(() => {
       checkForUpdate()
         .then((info) => {
-          if (info) setUpdate(info);
+          if (info) {
+            setUpdatePhase("offer");
+            setUpdate(info);
+          }
         })
         .catch(() => {});
     }, 5000);
@@ -234,48 +251,69 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-shell">
-      {sidebarOpen ? (
-        <>
-          <SessionTree />
-          <SidebarResizer />
-        </>
-      ) : (
-        <button
-          className="sidebar-show"
-          title={t.showSidebar}
-          aria-label={t.showSidebarAria}
-          onClick={() => useUI.getState().setSidebar(true)}
-        >
-          <PanelLeftOpen size={16} />
-        </button>
-      )}
-      <Workspace />
+    <div className="app-frame">
+      <TitleBar />
+      <div className="app-shell">
+        {sidebarOpen && (
+          <>
+            <SessionTree />
+            <SidebarResizer />
+          </>
+        )}
+        <Workspace />
+      </div>
       <CommandPalette />
       <SettingsDialog />
       <NewSessionDialog />
       <ShortcutsDialog />
       {update && (
         <div className="update-toast" role="status">
-          <span className="update-text">{t.updateAvailable(update.version)}</span>
-          <button
-            className="update-btn"
-            onClick={() => {
-              void openExternal(update.url);
-              setUpdate(null);
-            }}
-          >
-            <ArrowDownToLine size={14} />
-            {t.updateDownload}
-          </button>
-          <button
-            className="icon-btn sm"
-            title={t.updateLater}
-            aria-label={t.updateLater}
-            onClick={() => setUpdate(null)}
-          >
-            <X size={14} />
-          </button>
+          <span className="update-text">
+            {updatePhase === "installing"
+              ? updateProgress === 100
+                ? t.updateInstalling
+                : t.updateDownloading(updateProgress)
+              : updatePhase === "error"
+                ? t.updateFailed
+                : t.updateAvailable(update.version)}
+          </span>
+          {updatePhase === "offer" && (
+            <button
+              className="update-btn"
+              onClick={() => {
+                setUpdatePhase("installing");
+                setUpdateProgress(null);
+                installUpdate(setUpdateProgress).catch((e) => {
+                  console.warn("update install failed", e);
+                  setUpdatePhase("error");
+                });
+              }}
+            >
+              <ArrowDownToLine size={14} />
+              {t.updateInstall}
+            </button>
+          )}
+          {updatePhase === "error" && (
+            <button
+              className="update-btn"
+              onClick={() => {
+                void openExternal(RELEASES_URL);
+                setUpdate(null);
+              }}
+            >
+              {t.updateOpenGithub}
+            </button>
+          )}
+          {updatePhase !== "installing" && (
+            <button
+              className="icon-btn sm"
+              title={t.updateLater}
+              aria-label={t.updateLater}
+              onClick={() => setUpdate(null)}
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       )}
     </div>

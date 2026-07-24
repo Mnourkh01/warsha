@@ -32,6 +32,23 @@ export function buildPlanPrompt(
   ].join("\n");
 }
 
+/** Ask mode: no plan exists yet (or the user wants a fresh one) - the AI studies the
+ *  project and writes the draft file; Warsha drops .warsha/BLUEPRINT.md with the
+ *  format right before this prompt is sent. Requires a project folder. */
+export function buildDraftRequestPrompt(opts: { cwd: string }): string {
+  return [
+    "I want a project plan I can load onto Warsha's Blueprint canvas (a visual plan: blocks and arrows).",
+    "",
+    `Working folder: ${opts.cwd}`,
+    "",
+    "Do this:",
+    "1. Read .warsha/BLUEPRINT.md in this folder - it defines the exact plan JSON format. If the file is missing, ask me for the format before writing anything.",
+    "2. Study the project first (README, manifests, source layout). If the folder is empty or the goal is unclear, ask me 3 to 5 short questions before planning.",
+    "3. Write the full plan to .warsha/plan.draft.json: 2 to 4 phases with exit criteria, tasks with acceptance criteria, risks as risk notes, a gate before anything irreversible, tests, and a deploy step with a rollback plan.",
+    "4. Tell me when it is written - I will load it on the Blueprint and review it there.",
+  ].join("\n");
+}
+
 /** Continue mode: the AI already knows the plan (built or reviewed together, or it can
  *  read .warsha/plan.md). Sends only context plus the review suggestions the user
  *  accepted - no plan dump. Requires a project folder (the AI reads the file). */

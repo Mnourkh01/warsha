@@ -22,6 +22,7 @@ import {
   type Edge,
   type IsValidConnection,
 } from "@xyflow/react";
+import { Sparkles } from "lucide-react";
 import { uid } from "../../lib/id";
 import { useStrings } from "../../lib/i18n";
 import {
@@ -105,6 +106,8 @@ interface CanvasProps {
   simData?: PlanSimulation;
   simError?: ReviewError;
   onRerunSim: () => void;
+  /** Opens the send modal in ask-for-a-plan mode (empty-canvas call to action). */
+  onAskAi?: () => void;
   /** Rendered instead of preview/inspector when set (the AI review panel). */
   sidePanel?: ReactNode;
 }
@@ -125,6 +128,7 @@ function CanvasInner({
   simData,
   simError,
   onRerunSim,
+  onAskAi,
   sidePanel,
 }: CanvasProps) {
   const t = useStrings();
@@ -412,7 +416,17 @@ function CanvasInner({
           <Controls showInteractive={false} />
           <MiniMap pannable zoomable />
         </ReactFlow>
-        {nodes.length === 0 && <div className="plan-empty-hint">{t.planEmptyHint}</div>}
+        {nodes.length === 0 && (
+          <div className="plan-empty-hint">
+            <span>{t.planEmptyHint}</span>
+            {onAskAi && (
+              <button className="btn" onClick={onAskAi}>
+                <Sparkles size={14} />
+                {t.planEmptyAskBtn}
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {sidePanel ? (
         sidePanel

@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Send, X } from "lucide-react";
 import { DialogTrap } from "../../lib/dialog-trap";
-import { clipboardWriteText, whichProgram } from "../../lib/ipc";
+import { clipboardWriteText, planSpecSave, whichProgram } from "../../lib/ipc";
 import { AI_TYPES, type AiType } from "../../lib/sessionTypes";
 import { useStrings } from "../../lib/i18n";
 import { MAX_PER_WS, useWorkspaces } from "../../store/workspaces";
 import { usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
-import { buildContextPrompt, buildPlanPrompt } from "./prompt";
+import { BLUEPRINT_SPEC } from "./blueprintSpec";
+import { buildContextPrompt, buildDraftRequestPrompt, buildPlanPrompt } from "./prompt";
 import type { PlanReview } from "./review";
 import { planToMarkdown } from "./serializeMarkdown";
 import { sendPlanToAi, type SendError } from "./sendToAi";
 
-type SendMode = "full" | "context";
+type SendMode = "full" | "context" | "ask";
 
 /** Preview-and-confirm step before the handoff: pick which AI CLI receives the plan
  *  (Claude Code, Gemini CLI, or Codex) and what to send - the full plan for an AI
@@ -40,7 +41,12 @@ export function SendToAiModal({
   const [ai, setAi] = useState<AiType>(AI_TYPES[0]);
   // Absent = probe still running; a missing CLI disables Send and shows its install line.
   const [avail, setAvail] = useState<Record<string, boolean>>({});
-  const [mode, setMode] = useState<SendMode>("full");
+  // An empty canvas has nothing to send; asking the AI to draft is the only move.
+  const planEmpty = useMemo(() => {
+    const doc = usePlans.getState().plans[wsId];
+    return !doc || doc.nodes.length === 0;
+  }, [wsId]);
+  const [mode, setMode] = useState<SendMode>(planEmpty ? "ask" : "full");
   const suggestions = useMemo(() => review?.improvements ?? [], [review]);
   const [picked, setPicked] = useState<boolean[]>(() => suggestions.map(() => true));
   // A review can finish WHILE the modal is open (it runs in the panel behind); resync
@@ -63,7 +69,9 @@ export function SendToAiModal({
   useEffect(() => {
     if (mode === "full") {
       setPrompt(fullPrompt);
-    } else if (cwd) {
+    } else if (mode === "ask" && cwd) {
+      setPrompt(buildDraftRequestPrompt({ cwd }));
+    } else if (mode === "context" && cwd) {
       setPrompt(
         buildContextPrompt({
           cwd,
@@ -115,6 +123,13 @@ export function SendToAiModal({
     setBusy(true);
     busyRef.current = true;
     setError(null);
+    if (mode === "ask" && cwd) {
+      // The ask prompt cites .warsha/BLUEPRINT.md; drop it first. Non-fatal: the
+      // prompt tells the AI to ask for the format if the file is missing.
+      await planSpecSave(cwd, BLUEPRINT_SPEC).catch((e) =>
+        console.warn("blueprint spec write failed", e),
+      );
+    }
     const err = await sendPlanToAi(prompt, ai);
     // On success the send flow closed the planner, which unmounted this modal.
     if (err) {
@@ -179,20 +194,30 @@ export function SendToAiModal({
             <div className="seg plan-send-target">
               <button
                 className={mode === "full" ? "on" : ""}
-                disabled={busy}
+                disabled={busy || planEmpty}
+                title={planEmpty ? t.sendPlanEmptyHint : undefined}
                 onClick={() => setMode("full")}
               >
                 {t.sendModeFull}
               </button>
               <button
                 className={mode === "context" ? "on" : ""}
-                disabled={busy || !cwd}
-                title={!cwd ? t.sendNeedsFolder : undefined}
+                disabled={busy || !cwd || planEmpty}
+                title={!cwd ? t.sendNeedsFolder : planEmpty ? t.sendPlanEmptyHint : undefined}
                 onClick={() => setMode("context")}
               >
                 {t.sendModeContext}
               </button>
+              <button
+                className={mode === "ask" ? "on" : ""}
+                disabled={busy || !cwd}
+                title={!cwd ? t.sendNeedsFolder : undefined}
+                onClick={() => setMode("ask")}
+              >
+                {t.sendModeAsk}
+              </button>
             </div>
+            {mode === "ask" && cwd && <span className="field-hint">{t.sendModeAskHint}</span>}
             {!cwd && <span className="field-hint">{t.sendNeedsFolder}</span>}
           </div>
           {mode === "context" &&

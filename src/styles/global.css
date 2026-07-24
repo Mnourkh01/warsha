@@ -12,9 +12,17 @@
   --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", monospace;
 
   /* radius scale */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* chrome metrics */
+  --titlebar-h: 36px;
+
+  /* motion scale - chrome transitions only, terminals never animate */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 0.12s;
+  --dur-med: 0.16s;
 }
 
 :root,
@@ -49,6 +57,17 @@
 
   /* Focus ring */
   --ring: #8b7cf6;
+
+  /* Depth - shadows for floating surfaces (menus, dialogs, toasts) */
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.2), 0 2px 8px rgb(0 0 0 / 0.14);
+  --shadow-2: 0 4px 14px rgb(0 0 0 / 0.3), 0 1px 4px rgb(0 0 0 / 0.2);
+  --shadow-3: 0 18px 48px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.3);
+
+  /* Mica chrome: titlebar + sidebar are semi-transparent so the OS backdrop shows
+     through; terminal surfaces stay fully opaque. Falls back to a normal panel look
+     when the window is opaque (plain browser, no effects). */
+  --bg-chrome: color-mix(in srgb, var(--bg-panel) 62%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-elev) 86%, transparent);
 
   /* Session tints (user-picked accents; ids in lib/tints.ts). Brighter set on dark. */
   --tint-red: #f87171;
@@ -86,6 +105,13 @@
 
   --ring: #6d4fd6;
 
+  --shadow-1: 0 1px 2px rgb(30 27 43 / 0.08), 0 2px 8px rgb(30 27 43 / 0.06);
+  --shadow-2: 0 4px 14px rgb(30 27 43 / 0.12), 0 1px 4px rgb(30 27 43 / 0.08);
+  --shadow-3: 0 18px 48px rgb(30 27 43 / 0.2), 0 4px 12px rgb(30 27 43 / 0.1);
+
+  --bg-chrome: color-mix(in srgb, var(--bg-panel) 58%, transparent);
+  --bg-glass: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+
   /* Session tints - deeper set so they hold contrast on light surfaces. */
   --tint-red: #dc2626;
   --tint-orange: #ea580c;
@@ -112,6 +138,14 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden; /* app owns its own scroll regions */
+}
+
+/* Inside Tauri the window is transparent so the Mica backdrop can show through the
+   chrome surfaces. The .in-tauri class is set at startup (App.tsx); in a plain
+   browser the page keeps its opaque background above. */
+html.in-tauri,
+html.in-tauri body {
+  background: transparent;
 }
 
 /* User-named content (session/group names) auto-directs so Arabic goes RTL,

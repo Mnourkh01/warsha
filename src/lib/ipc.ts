@@ -61,16 +61,6 @@ export function onPtyExit(cb: (id: string, code: number) => void): Promise<Unlis
   );
 }
 
-export interface UpdateInfo {
-  version: string;
-  url: string;
-}
-
-/** Newer GitHub release if one exists; null when up to date or unable to check. */
-export async function checkForUpdate(): Promise<UpdateInfo | null> {
-  return (await invoke<UpdateInfo | null>("update_check")) ?? null;
-}
-
 /** Full path of a program if it is on PATH, else null. */
 export async function whichProgram(program: string): Promise<string | null> {
   return (await invoke<string | null>("which_program", { program })) ?? null;
@@ -112,6 +102,12 @@ export async function planDraftRead(dir: string): Promise<string | null> {
 /** Mark the draft as loaded (renames it to plan.draft.applied.json). */
 export async function planDraftConsume(dir: string): Promise<void> {
   await invoke("plan_draft_consume", { dir });
+}
+
+/** Drop the draft-format spec at `<dir>/.warsha/BLUEPRINT.md` so AIs without a skill
+ *  system (codex, gemini) can learn the contract the ask-for-a-plan prompt cites. */
+export async function planSpecSave(dir: string, spec: string): Promise<void> {
+  await invoke("plan_spec_save", { dir, spec });
 }
 
 export interface ShellCheckResult {
@@ -239,4 +235,28 @@ export async function onWindowCloseRequested(
 /** Destroy the window immediately (bypasses close-requested handlers). */
 export async function destroyAppWindow(): Promise<void> {
   await getCurrentWindow().destroy();
+}
+
+/* ---- custom title bar (frameless window) ------------------------------------ */
+
+export async function minimizeAppWindow(): Promise<void> {
+  await getCurrentWindow().minimize();
+}
+
+export async function toggleMaximizeAppWindow(): Promise<void> {
+  await getCurrentWindow().toggleMaximize();
+}
+
+/** Close via the normal close-requested flow (session backup + PTY teardown run). */
+export async function closeAppWindow(): Promise<void> {
+  await getCurrentWindow().close();
+}
+
+export async function isAppWindowMaximized(): Promise<boolean> {
+  return await getCurrentWindow().isMaximized();
+}
+
+/** Fires on any window resize; used to keep the maximize/restore icon truthful. */
+export async function onWindowResized(cb: () => void): Promise<UnlistenFn> {
+  return getCurrentWindow().onResized(() => cb());
 }

@@ -10,6 +10,7 @@ import { applySettingsToAll, disposeTerminal, getTerminal } from "./features/ter
 import { resolveTheme } from "./lib/theme";
 import { ptyWrite } from "./lib/ipc";
 import { SHELL_LABELS, type ShellKind } from "./lib/types";
+import { autoTint } from "./lib/tints";
 
 export function shellDefaultName(shell: ShellKind): string {
   if (shell.kind === "custom") {
@@ -42,13 +43,22 @@ export function newSession(spec: {
   // Folder priority: explicit choice, then the workspace's project folder, then the
   // global default. This is what makes "workspace = project" actually hold.
   const wsId = spec.workspaceId ?? ws.activeWorkspaceId;
-  const wsCwd = ws.workspaces.find((w) => w.id === wsId)?.defaultCwd;
+  const target = ws.workspaces.find((w) => w.id === wsId);
+  const wsCwd = target?.defaultCwd;
+  // Every new session starts with its own color (first one its workspace is not using),
+  // so panes and sidebar rows are tellable-apart without manual cycling.
+  const siblingIds = target?.sessionIds ?? [];
+  const tint = autoTint(
+    siblingIds.map((sid) => ws.sessions[sid]?.tint),
+    siblingIds.length,
+  );
   const id = ws.addSession(
     {
       shell,
       name: spec.name ?? shellDefaultName(shell),
       cwd: spec.cwd ?? wsCwd ?? settings.defaultCwd,
       typeId: spec.typeId,
+      tint,
     },
     spec.workspaceId,
   );

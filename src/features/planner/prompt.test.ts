@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildContextPrompt, buildPlanPrompt } from "./prompt";
+import { buildContextPrompt, buildDraftRequestPrompt, buildPlanPrompt } from "./prompt";
 
 describe("buildPlanPrompt", () => {
   it("wraps the markdown between plan markers with the name and folder", () => {
@@ -46,5 +46,15 @@ describe("buildContextPrompt", () => {
     expect(out).toContain(".warsha/plan.md");
     expect(out).toContain("wait for my instructions");
     expect(out).not.toContain("Accepted improvements");
+  });
+});
+
+describe("buildDraftRequestPrompt", () => {
+  it("points the AI at the spec file and the draft target", () => {
+    const out = buildDraftRequestPrompt({ cwd: "C:\\dev\\x" });
+    expect(out).toContain("Working folder: C:\\dev\\x");
+    expect(out).toContain(".warsha/BLUEPRINT.md");
+    expect(out).toContain(".warsha/plan.draft.json");
+    expect(out).toContain("risks as risk notes");
   });
 });

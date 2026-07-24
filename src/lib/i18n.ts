@@ -5,6 +5,13 @@
 // Arabic shaping (arabicGlyphs.ts) - neither depends on a UI locale.
 
 const en = {
+  // title bar
+  minimizeWindow: "Minimize",
+  maximizeWindow: "Maximize",
+  restoreWindow: "Restore",
+  closeWindow: "Close",
+  workspacesGroup: "Workspaces",
+
   // sidebar header
   newWorkspace: "New workspace",
   newSession: "New session",
@@ -42,6 +49,7 @@ const en = {
   saveAsTemplateNamed: (name: string) => `Save ${name} as a template`,
   openTemplateTitle: (name: string, n: number) =>
     `Open ${name} as a new workspace (${n} session${n === 1 ? "" : "s"})`,
+  templateSessions: (n: number) => `${n} session${n === 1 ? "" : "s"}`,
   deleteTemplate: "Delete template",
   deleteTemplateNamed: (name: string) => `Delete template ${name}`,
   deleteTemplateConfirm: (name: string) =>
@@ -71,7 +79,7 @@ const en = {
   changeFolderTitle: (name: string) => `Choose a new folder for ${name}`,
   statusRunning: "Running",
   statusExited: "Exited",
-  statusIdle: "Idle",
+  statusIdle: "Not started",
   needsAttention: "Needs attention",
   attentionHint: "Finished or waiting for input",
   maximizePane: "Maximize pane (Ctrl+Shift+M)",
@@ -183,10 +191,21 @@ const en = {
   cmdBroadcastOff: "Broadcast typing: turn off",
   scBroadcast: "Broadcast typing to all sessions in the workspace",
 
-  // update toast
+  // updates (toast + settings section)
   updateAvailable: (version: string) => `Warsha ${version} is available`,
-  updateDownload: "Download",
+  updateInstall: "Update",
   updateLater: "Later",
+  updateOpenGithub: "Open GitHub",
+  updatesLabel: "Updates",
+  currentVersion: (v: string) => `version ${v}`,
+  updateCheckNow: "Check for updates",
+  updateTo: (v: string) => `Update to ${v}`,
+  updateChecking: "Checking for updates...",
+  updateUpToDate: "You are on the latest version",
+  updateDownloading: (pct: number | null) =>
+    pct === null ? "Downloading..." : `Downloading ${pct}%`,
+  updateInstalling: "Installing, Warsha will restart",
+  updateFailed: "Update failed. You can download it from GitHub instead",
 
   // planner (plan canvas)
   planProject: "Plan this project",
@@ -330,6 +349,11 @@ const en = {
   sendPlanModeLabel: "What to send",
   sendModeFull: "Full plan",
   sendModeContext: "Suggestions only",
+  sendModeAsk: "Ask for a plan",
+  sendModeAskHint:
+    "The AI studies the project, writes a plan draft, and a Load banner appears here.",
+  sendPlanEmptyHint: "The blueprint is empty. There is nothing to send yet.",
+  planEmptyAskBtn: "Ask an AI to draft this plan",
   sendNeedsFolder:
     "Suggestions mode needs a project folder: the AI reads the plan from .warsha/plan.md there.",
   sendPickSuggestions: "Review suggestions to include",
