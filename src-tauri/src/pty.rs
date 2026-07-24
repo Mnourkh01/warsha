@@ -349,7 +349,7 @@ fn write_error(id: &str, e: TrySendError<Vec<u8>>) -> String {
 }
 
 #[cfg(windows)]
-fn kill_tree(pid: Option<u32>) {
+pub(crate) fn kill_tree(pid: Option<u32>) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let Some(pid) = pid else {
@@ -372,7 +372,7 @@ fn kill_tree(pid: Option<u32>) {
 }
 
 #[cfg(not(windows))]
-fn kill_tree(_pid: Option<u32>) {}
+pub(crate) fn kill_tree(_pid: Option<u32>) {}
 
 fn build_command(shell: &ShellSpec, cwd: Option<&str>) -> CommandBuilder {
     let mut cmd = match shell {

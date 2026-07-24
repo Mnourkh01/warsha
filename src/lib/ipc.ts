@@ -76,6 +76,18 @@ export async function whichProgram(program: string): Promise<string | null> {
   return (await invoke<string | null>("which_program", { program })) ?? null;
 }
 
+export interface ShellCheckResult {
+  ok: boolean;
+  /** Short reason when not ok (trimmed program output). */
+  detail?: string;
+}
+
+/** Deep availability check for launchers that exist even when broken: WSL without a
+ *  Linux distribution, a bash.exe stub without a real bash. Can take a few seconds. */
+export async function checkShell(kind: "wsl" | "bash"): Promise<ShellCheckResult> {
+  return await invoke<ShellCheckResult>("shell_check", { kind });
+}
+
 /** Native folder picker. Returns the chosen absolute path, or null if cancelled. */
 export async function pickFolder(title?: string): Promise<string | null> {
   const res = await openDialog({ directory: true, multiple: false, title });

@@ -65,6 +65,14 @@ pub fn which_program(program: String) -> Option<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+/// Deep availability check for shells whose launcher exists even when the shell is
+/// unusable (wsl.exe without a distro, a broken bash.exe stub). Runs the real binary
+/// headless with a timeout - hence `async`, it can block for seconds.
+#[tauri::command(async)]
+pub fn shell_check(kind: String) -> Result<crate::shells::ShellCheck, String> {
+    crate::shells::check(&kind)
+}
+
 #[tauri::command(async)]
 pub fn session_state_load(app: AppHandle) -> Result<Option<Value>, String> {
     session::load(&app)

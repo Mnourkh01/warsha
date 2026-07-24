@@ -59,6 +59,8 @@ class TerminalController {
   /** In-flight ptySpawn, settle-safe. dispose() awaits it so the kill can never race a
    *  spawn that has not registered in Rust yet (which would orphan a live ConPTY). */
   private spawnSettled: Promise<void> | null = null;
+  /** When the PTY spawn was issued; a failure exit shortly after gets a help hint. */
+  private spawnedAt = 0;
   private ro?: ResizeObserver;
   private lastCols = 0;
   private lastRows = 0;
@@ -239,10 +241,16 @@ class TerminalController {
     if (this.opened && !this.disposed) this.fitAndMaybeSpawn();
   }
 
-  /** Called when the backend reports the process exited. */
+  /** Called when the backend reports the process exited. A failure within seconds of
+   *  spawn usually means the shell itself is broken/missing, not the user's work - so
+   *  add a plain-words hint instead of leaving only the raw error. */
   notifyExit(code?: number): void {
     const suffix = code ? ` (code ${code})` : "";
     this.term.write(`\r\n\x1b[38;5;244m[process exited${suffix}]\x1b[0m\r\n`);
+    if (code && Date.now() - this.spawnedAt < 5000) {
+      const hint = fastExitHint(this.opts.shell);
+      if (hint) this.term.write(`\x1b[38;5;244m[warsha] ${hint}\x1b[0m\r\n`);
+    }
   }
 
   applySettings(opts: Partial<TerminalOpts>): void {
@@ -332,6 +340,7 @@ class TerminalController {
 
   private spawn(cols: number, rows: number): void {
     this.spawned = true;
+    this.spawnedAt = Date.now();
     const inflight = ptySpawn(
       { id: this.sessionId, shell: this.opts.shell, cwd: this.opts.cwd, cols, rows },
       (bytes) => {
@@ -395,6 +404,22 @@ class TerminalController {
     this.detach();
     return killed;
   }
+}
+
+/** Plain-words guidance for a shell that died right after starting, keyed off what was
+ *  being launched. Empty string = no hint (a normal program exit needs none). */
+function fastExitHint(shell: ShellKind): string {
+  const program = shell.kind === "custom" ? shell.program.toLowerCase() : "";
+  if (shell.kind === "wsl" || program.includes("wsl")) {
+    return "WSL could not start. If no Linux distribution is installed, run: wsl --install -d Ubuntu";
+  }
+  if (program.includes("bash")) {
+    return "Bash could not start. Install Git for Windows: winget install --id Git.Git";
+  }
+  if (program.includes("ssh")) {
+    return "The SSH connection ended right away. Check the host name, your network, and your keys.";
+  }
+  return "";
 }
 
 // ---- registry -------------------------------------------------------------

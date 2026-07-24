@@ -11,6 +11,13 @@ export interface ShellType {
   shell: ShellKind;
   /** Program to check on PATH before offering the shell (absent = always available). */
   probe?: string;
+  /** Deep availability check (Rust shell_check) for launchers that exist even when the
+   *  shell is unusable - wsl.exe ships without a distro, bash.exe can be a dead stub.
+   *  Takes precedence over `probe` in the wizard. */
+  check?: "wsl" | "bash";
+  /** Headline for the wizard's help card when the check fails (defaults to
+   *  "X is not installed"). */
+  missingTitle?: string;
   install?: string;
   /** Remote session: the wizard asks for a target instead of AI + folder, and the
    *  settings default-shell dropdown skips it (a default needs no per-use input). */
@@ -28,13 +35,21 @@ export interface AiType {
 export const SHELL_TYPES: ShellType[] = [
   { id: "powershell", label: "PowerShell", shell: { kind: "powershell" } },
   { id: "cmd", label: "Command Prompt", shell: { kind: "cmd" } },
-  { id: "wsl", label: "WSL", shell: { kind: "wsl" }, probe: "wsl.exe" },
+  {
+    id: "wsl",
+    label: "WSL",
+    shell: { kind: "wsl" },
+    check: "wsl",
+    missingTitle: "WSL needs a Linux distribution (like Ubuntu). Run this, then restart the PC:",
+    install: "wsl --install -d Ubuntu",
+  },
   {
     id: "bash",
     label: "Bash",
     shell: { kind: "custom", program: "bash.exe", args: ["-i", "-l"] },
-    probe: "bash.exe",
-    install: "Install Git for Windows (git-scm.com) or enable WSL to get bash.",
+    check: "bash",
+    missingTitle: "Bash is not working on this PC. The easiest fix is Git for Windows:",
+    install: "winget install --id Git.Git",
   },
   {
     id: "ssh",

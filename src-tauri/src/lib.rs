@@ -3,6 +3,7 @@
 mod commands;
 mod pty;
 mod session;
+mod shells;
 mod update;
 
 use pty::PtyManager;
@@ -31,6 +32,7 @@ pub fn run() {
             commands::pty_resize,
             commands::pty_kill,
             commands::which_program,
+            commands::shell_check,
             commands::session_state_load,
             commands::session_state_save,
             commands::session_state_backup,

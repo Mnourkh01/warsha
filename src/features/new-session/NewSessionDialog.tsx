@@ -4,7 +4,7 @@ import { useUI } from "../../store/ui";
 import { useSettings } from "../../store/settings";
 import { MAX_PER_WS, useWorkspaces } from "../../store/workspaces";
 import { newSession } from "../../actions";
-import { clipboardWriteText, pickFolder, whichProgram } from "../../lib/ipc";
+import { checkShell, clipboardWriteText, pickFolder, whichProgram } from "../../lib/ipc";
 import {
   AI_TYPES,
   SHELL_TYPES,
@@ -46,7 +46,12 @@ export function NewSessionDialog() {
   const [shellType, setShellType] = useState<ShellType | null>(null);
   const [ai, setAi] = useState<AiType | null>(null);
   const [sshTarget, setSshTarget] = useState("");
-  const [missing, setMissing] = useState<{ label: string; install: string } | null>(null);
+  const [missing, setMissing] = useState<{
+    label: string;
+    install: string;
+    title?: string;
+    detail?: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +82,21 @@ export function NewSessionDialog() {
     setError(null);
     setBusy(true);
     try {
-      if (s.probe && !(await whichProgram(s.probe))) {
+      // Deep check first (wsl.exe exists without a distro, bash.exe can be a dead
+      // stub); PATH probe covers the launchers where existence really means working.
+      if (s.check) {
+        const res = await checkShell(s.check);
+        if (!res.ok) {
+          setMissing({
+            label: s.label,
+            title: s.missingTitle,
+            install: s.install ?? `${s.label} is not available.`,
+            detail: res.detail,
+          });
+          setBusy(false);
+          return;
+        }
+      } else if (s.probe && !(await whichProgram(s.probe))) {
         setMissing({ label: s.label, install: s.install ?? `Program not found: ${s.probe}` });
         setBusy(false);
         return;
@@ -329,7 +348,7 @@ export function NewSessionDialog() {
 
           {missing && (
             <div className="install-note">
-              <div className="install-title">{t.notInstalled(missing.label)}</div>
+              <div className="install-title">{missing.title ?? t.notInstalled(missing.label)}</div>
               <div className="install-row">
                 <code>{missing.install}</code>
                 <button
@@ -341,6 +360,7 @@ export function NewSessionDialog() {
                   {copied ? <Check size={14} /> : <Copy size={14} />}
                 </button>
               </div>
+              {missing.detail && <div className="install-detail">{missing.detail}</div>}
             </div>
           )}
           {error && <div className="picker-error">{error}</div>}
