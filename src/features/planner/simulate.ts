@@ -41,7 +41,10 @@ function nodeLine(n: PlanNode, phaseLabelById: Map<string, string>): string {
   const phase = n.phaseId ? phaseLabelById.get(n.phaseId) : undefined;
   if (phase) bits.push(`phase: ${phase}`);
   if (n.kind === "api") bits.push(`${n.method ?? "GET"} ${n.path ?? "/"}`);
-  if (n.acceptance?.length) bits.push(`acceptance: ${n.acceptance.join("; ").slice(0, 160)}`);
+  else if (n.path) bits.push(`route: ${n.path}`);
+  if (n.status) bits.push(n.status === "done" ? "already done" : "in progress");
+  if (n.effort) bits.push(`effort: ${n.effort.toUpperCase()}`);
+  if (n.acceptance?.length) bits.push(`items: ${n.acceptance.join("; ").slice(0, 160)}`);
   if (n.fields?.length) bits.push(`fields: ${n.fields.map((f) => f.name).join(", ").slice(0, 120)}`);
   if (n.description) bits.push(n.description.replace(/\s+/g, " ").slice(0, 120));
   return bits.join(" | ");

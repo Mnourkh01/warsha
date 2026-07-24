@@ -6,11 +6,35 @@ import { isTint, type Tint } from "../lib/tints";
 // The doc shape is OURS, not the canvas library's - the sanitizer and the markdown
 // serializer never depend on @xyflow types (mapping lives in PlanCanvas only).
 
-export const PLAN_NODE_KINDS = ["phase", "task", "api", "service", "data", "note"] as const;
+export const PLAN_NODE_KINDS = [
+  "phase",
+  "task",
+  "decision",
+  "note",
+  "screen",
+  "api",
+  "service",
+  "data",
+  "integration",
+  "test",
+  "deploy",
+] as const;
 export type PlanNodeKind = (typeof PLAN_NODE_KINDS)[number];
 
 export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
+
+/** Absent status means "todo" - only progress is stored. */
+export const PLAN_STATUSES = ["doing", "done"] as const;
+export type PlanStatus = (typeof PLAN_STATUSES)[number];
+
+export const PLAN_EFFORTS = ["s", "m", "l"] as const;
+export type PlanEffort = (typeof PLAN_EFFORTS)[number];
+
+/** Kinds whose list field is meaningful (acceptance criteria / options / checks). */
+export const LIST_KINDS = ["task", "decision", "test"] as const;
+/** Kinds that carry a path-like field (URL path / screen route). */
+export const PATH_KINDS = ["api", "screen"] as const;
 
 // Boundary caps, used on hydrate AND as add-time guards. A max-size plan stays far
 // under the 5 MB Rust state-file cap.
@@ -44,10 +68,15 @@ export interface PlanNode {
   tint?: Tint;
   /** Phase this block belongs to (id of a phase node). Ignored on phase nodes. */
   phaseId?: string;
+  /** Progress; absent = todo. */
+  status?: PlanStatus;
+  /** Rough size: s / m / l. */
+  effort?: PlanEffort;
   /** api only */
   method?: HttpMethod;
+  /** api (URL path) and screen (route) */
   path?: string;
-  /** task only */
+  /** task (acceptance criteria), decision (options), test (checks) */
   acceptance?: string[];
   /** data only */
   fields?: PlanField[];
@@ -103,19 +132,29 @@ export function sanitizePlanNode(raw: unknown): PlanNode | null {
     phaseId:
       kind !== "phase" && typeof r.phaseId === "string" && r.phaseId ? r.phaseId : undefined,
   };
+  node.status = (PLAN_STATUSES as readonly string[]).includes(r.status as string)
+    ? (r.status as PlanStatus)
+    : undefined;
+  node.effort = (PLAN_EFFORTS as readonly string[]).includes(r.effort as string)
+    ? (r.effort as PlanEffort)
+    : undefined;
   if (kind === "api") {
     node.method = (HTTP_METHODS as readonly string[]).includes(r.method as string)
       ? (r.method as HttpMethod)
       : undefined;
+  }
+  if ((PATH_KINDS as readonly string[]).includes(kind)) {
     node.path = cleanStr(r.path, MAX_PATH);
-  } else if (kind === "task") {
+  }
+  if ((LIST_KINDS as readonly string[]).includes(kind)) {
     const list = Array.isArray(r.acceptance) ? r.acceptance : [];
     const acceptance = list
       .filter((a): a is string => typeof a === "string" && a.trim().length > 0)
       .map((a) => a.slice(0, MAX_ACCEPTANCE_LEN))
       .slice(0, MAX_ACCEPTANCE);
     if (acceptance.length > 0) node.acceptance = acceptance;
-  } else if (kind === "data") {
+  }
+  if (kind === "data") {
     const list = Array.isArray(r.fields) ? r.fields : [];
     const fields: PlanField[] = [];
     for (const f of list) {

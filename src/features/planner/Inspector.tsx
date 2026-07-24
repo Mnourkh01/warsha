@@ -4,6 +4,7 @@ import { TINTS } from "../../lib/tints";
 import { useStrings } from "../../lib/i18n";
 import {
   HTTP_METHODS,
+  LIST_KINDS,
   MAX_ACCEPTANCE,
   MAX_ACCEPTANCE_LEN,
   MAX_DESC,
@@ -11,7 +12,9 @@ import {
   MAX_FIELD_STR,
   MAX_LABEL,
   MAX_PATH,
+  PATH_KINDS,
   type HttpMethod,
+  type PlanEffort,
   type PlanField,
   type PlanNode,
 } from "../../store/plans";
@@ -129,6 +132,46 @@ export function Inspector({
           ))}
         </div>
       </div>
+      <div className="field">
+        <span className="field-label">{t.inspStatus}</span>
+        <div className="seg">
+          <button
+            className={!node.status ? "on" : ""}
+            onClick={() => onPatch({ status: undefined })}
+          >
+            {t.statusTodo}
+          </button>
+          <button
+            className={node.status === "doing" ? "on" : ""}
+            onClick={() => onPatch({ status: "doing" })}
+          >
+            {t.statusDoing}
+          </button>
+          <button
+            className={node.status === "done" ? "on" : ""}
+            onClick={() => onPatch({ status: "done" })}
+          >
+            {t.statusDone}
+          </button>
+        </div>
+      </div>
+      {node.kind !== "phase" && node.kind !== "note" && (
+        <div className="field">
+          <span className="field-label">{t.inspEffort}</span>
+          <div className="seg">
+            {(["s", "m", "l"] as PlanEffort[]).map((e) => (
+              <button
+                key={e}
+                className={node.effort === e ? "on" : ""}
+                aria-label={e === "s" ? t.effortSmall : e === "m" ? t.effortMedium : t.effortLarge}
+                onClick={() => onPatch({ effort: node.effort === e ? undefined : e })}
+              >
+                {e.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {node.kind !== "phase" && (
         <label className="field">
           <span className="field-label">{t.inspPhase}</span>
@@ -147,37 +190,42 @@ export function Inspector({
         </label>
       )}
       {node.kind === "api" && (
-        <>
-          <label className="field">
-            <span className="field-label">{t.inspMethod}</span>
-            <select
-              className="select"
-              value={node.method ?? "GET"}
-              onChange={(e) => onPatch({ method: e.target.value as HttpMethod })}
-            >
-              {HTTP_METHODS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span className="field-label">{t.inspPath}</span>
-            <input
-              className="input mono"
-              placeholder="/api/things"
-              maxLength={MAX_PATH}
-              value={node.path ?? ""}
-              onChange={(e) => onPatch({ path: e.target.value || undefined })}
-            />
-          </label>
-        </>
+        <label className="field">
+          <span className="field-label">{t.inspMethod}</span>
+          <select
+            className="select"
+            value={node.method ?? "GET"}
+            onChange={(e) => onPatch({ method: e.target.value as HttpMethod })}
+          >
+            {HTTP_METHODS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
-      {node.kind === "task" && (
+      {(PATH_KINDS as readonly string[]).includes(node.kind) && (
+        <label className="field">
+          <span className="field-label">{node.kind === "screen" ? t.inspRoute : t.inspPath}</span>
+          <input
+            className="input mono"
+            placeholder={node.kind === "screen" ? "/login" : "/api/things"}
+            maxLength={MAX_PATH}
+            value={node.path ?? ""}
+            onChange={(e) => onPatch({ path: e.target.value || undefined })}
+          />
+        </label>
+      )}
+      {(LIST_KINDS as readonly string[]).includes(node.kind) && (
         <label className="field">
           <span className="field-label">
-            {t.inspAcceptance} <span className="field-hint">{t.inspAcceptanceHint}</span>
+            {node.kind === "decision"
+              ? t.inspOptions
+              : node.kind === "test"
+                ? t.inspChecks
+                : t.inspAcceptance}{" "}
+            <span className="field-hint">{t.inspAcceptanceHint}</span>
           </span>
           <textarea
             className="input plan-textarea"

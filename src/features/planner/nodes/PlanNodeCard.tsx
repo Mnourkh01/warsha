@@ -1,4 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { CircleCheck } from "lucide-react";
 import { tintClasses } from "../../../lib/tints";
 import { useStrings } from "../../../lib/i18n";
 import { KIND_META } from "../nodeKinds";
@@ -20,14 +21,27 @@ export function PlanNodeCard({ data, selected }: NodeProps<PlanFlowNode>) {
       <div className="plan-node-head">
         <Icon size={12} />
         <span>{t.planKind[n.kind]}</span>
+        <span className="plan-node-flags">
+          {n.effort && <b className="plan-node-eff">{n.effort.toUpperCase()}</b>}
+          {n.status === "doing" && (
+            <span className="plan-node-doing" role="img" aria-label={t.statusDoing} />
+          )}
+          {n.status === "done" && <CircleCheck size={12} aria-label={t.statusDone} />}
+        </span>
       </div>
-      <div className="plan-node-label bidi-auto">{n.label}</div>
+      <div className={`plan-node-label bidi-auto${n.status === "done" ? " done" : ""}`}>
+        {n.label}
+      </div>
       {n.kind === "api" ? (
         <div className="plan-node-sub mono">{`${n.method ?? "GET"} ${n.path ?? "/"}`}</div>
+      ) : n.kind === "screen" && n.path ? (
+        <div className="plan-node-sub mono">{n.path}</div>
       ) : n.kind === "data" && n.fields?.length ? (
         <div className="plan-node-sub">{t.planFieldCount(n.fields.length)}</div>
       ) : n.kind === "task" && n.acceptance?.length ? (
         <div className="plan-node-sub">{t.planAcceptanceCount(n.acceptance.length)}</div>
+      ) : (n.kind === "decision" || n.kind === "test") && n.acceptance?.length ? (
+        <div className="plan-node-sub">{t.planListCount(n.acceptance.length)}</div>
       ) : n.description ? (
         <div className="plan-node-sub clamp bidi-auto">{n.description}</div>
       ) : null}

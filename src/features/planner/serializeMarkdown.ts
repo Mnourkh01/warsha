@@ -5,14 +5,30 @@ import { compareNodes, dependsOf, topoSortNodes } from "./graph";
 // regardless of array order, node positions, or viewport. Shared by the Export button
 // and the Send-to-Claude prompt, so what the user reads IS what the AI receives.
 
-const KIND_ORDER: readonly PlanNodeKind[] = ["task", "api", "service", "data", "note"];
+const KIND_ORDER: readonly PlanNodeKind[] = [
+  "task",
+  "decision",
+  "screen",
+  "api",
+  "service",
+  "data",
+  "integration",
+  "test",
+  "deploy",
+  "note",
+];
 
 const KIND_HEADINGS: Record<PlanNodeKind, string> = {
   phase: "Phases",
   task: "Tasks",
+  decision: "Decisions",
+  screen: "Screens",
   api: "API endpoints",
   service: "Services",
   data: "Data models",
+  integration: "Integrations",
+  test: "Tests",
+  deploy: "Deploy steps",
   note: "Notes",
 };
 
@@ -70,41 +86,53 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     return names.length > 0 ? `Depends on: ${names.join(", ")}` : null;
   };
 
+  // Sub-line label for the shared list field.
+  const LIST_PREFIX: Partial<Record<PlanNodeKind, string>> = {
+    task: "Acceptance",
+    decision: "Option",
+    test: "Check",
+  };
+
   const emitItem = (m: PlanNode) => {
     const dep = dependsLine(m);
     const desc = m.description ? inline(m.description) : "";
-    switch (m.kind) {
-      case "task": {
-        push(`- [ ] ${ref(m)}${desc ? ` - ${desc}` : ""}`);
-        for (const a of m.acceptance ?? []) push(`  - Acceptance: ${inline(a)}`);
-        if (dep) push(`  - ${dep}`);
-        break;
-      }
-      case "api": {
-        const sig = `${m.method ?? "GET"} ${m.path ? code(m.path) : "/"}`;
-        push(`- \`${sig}\` - ${ref(m)}${desc ? `: ${desc}` : ""}`);
-        if (dep) push(`  - ${dep}`);
-        break;
-      }
-      case "service":
-      case "data": {
-        push(`- **${ref(m)}**${desc ? ` - ${desc}` : ""}`);
-        for (const f of m.fields ?? []) {
-          push(`  - \`${code(f.name)}\`: ${inline(f.type)}${f.note ? ` - ${inline(f.note)}` : ""}`);
-        }
-        if (dep) push(`  - ${dep}`);
-        break;
-      }
-      case "note": {
-        push(`> **${ref(m)}**`);
-        const body = m.description ? block(m.description) : "";
-        for (const l of body ? body.split("\n") : []) push(`> ${l}`.trimEnd());
-        push();
-        break;
-      }
-      case "phase":
-        break; // phases are sections, never list items
+    if (m.kind === "note") {
+      push(`> **${ref(m)}**`);
+      const body = m.description ? block(m.description) : "";
+      for (const l of body ? body.split("\n") : []) push(`> ${l}`.trimEnd());
+      push();
+      return;
     }
+    if (m.kind === "phase") return; // phases are sections, never list items
+    // Every work item is a checkbox; effort and in-progress ride as compact tags.
+    const box = m.status === "done" ? "[x]" : "[ ]";
+    const tags = `${m.effort ? ` [${m.effort.toUpperCase()}]` : ""}${
+      m.status === "doing" ? " (in progress)" : ""
+    }`;
+    let head: string;
+    switch (m.kind) {
+      case "api":
+        head = `\`${m.method ?? "GET"} ${m.path ? code(m.path) : "/"}\` - ${ref(m)}`;
+        break;
+      case "screen":
+        head = `**${ref(m)}**${m.path ? ` \`${code(m.path)}\`` : ""}`;
+        break;
+      case "task":
+        head = ref(m);
+        break;
+      default:
+        head = `**${ref(m)}**`;
+    }
+    const sep = m.kind === "api" ? ": " : " - ";
+    push(`- ${box} ${head}${tags}${desc ? `${sep}${desc}` : ""}`);
+    const prefix = LIST_PREFIX[m.kind];
+    if (prefix) {
+      for (const a of m.acceptance ?? []) push(`  - ${prefix}: ${inline(a)}`);
+    }
+    for (const f of m.fields ?? []) {
+      push(`  - \`${code(f.name)}\`: ${inline(f.type)}${f.note ? ` - ${inline(f.note)}` : ""}`);
+    }
+    if (dep) push(`  - ${dep}`);
   };
 
   const emitMembers = (members: PlanNode[]) => {

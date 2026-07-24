@@ -78,6 +78,14 @@
   border-inline-end: 1px solid var(--border);
   overflow-y: auto;
 }
+.plan-palette-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-palette-group + .plan-palette-group {
+  margin-block-start: 6px;
+}
 .plan-palette-item {
   display: flex;
   align-items: center;
@@ -158,10 +166,35 @@
   text-transform: uppercase;
   color: var(--text-faint);
 }
+.plan-node-flags {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok);
+}
+.plan-node-eff {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+.plan-node-doing {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .plan-node-label {
   font-size: 13px;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+.plan-node-label.done {
+  text-decoration: line-through;
+  color: var(--text-dim);
 }
 .plan-node-sub {
   margin-top: 2px;

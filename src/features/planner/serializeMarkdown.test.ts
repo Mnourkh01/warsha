@@ -56,9 +56,9 @@ describe("planToMarkdown", () => {
     expect(md).toContain("Project folder: C:\\dev\\warsha");
     expect(md).toContain("- [ ] Wire store");
     expect(md).toContain("  - Acceptance: saves");
-    expect(md).toContain("- `GET /api/users` - List users");
+    expect(md).toContain("- [ ] `GET /api/users` - List users");
     expect(md).toContain("  - Depends on: Wire store");
-    expect(md).toContain("- **Auth service** - Sessions.");
+    expect(md).toContain("- [ ] **Auth service** - Sessions.");
     expect(md).toContain("- `id`: uuid - primary");
     expect(md).toContain("> **Reminder**");
     expect(md).toContain("> Line one.");
@@ -123,7 +123,32 @@ describe("planToMarkdown", () => {
         ],
       }),
     );
-    expect(md).toContain("- `POST /x/'y'` - Tricky label");
+    expect(md).toContain("- [ ] `POST /x/'y'` - Tricky label");
+  });
+
+  it("renders the power fields: done boxes, effort tags, options, checks, routes", () => {
+    const md = planToMarkdown(
+      doc({
+        nodes: [
+          node("t1", { label: "Ship it", status: "done", effort: "l" }),
+          node("t2", { label: "Busy", status: "doing" }),
+          node("d1", { kind: "decision", label: "Pick db", acceptance: ["SQLite", "Postgres"] }),
+          node("q1", { kind: "test", label: "Smoke", acceptance: ["app boots"] }),
+          node("s1", { kind: "screen", label: "Login", path: "/login" }),
+          node("dep1", { kind: "deploy", label: "Release" }),
+          node("i1", { kind: "integration", label: "Stripe" }),
+        ],
+      }),
+    );
+    expect(md).toContain("- [x] Ship it [L]");
+    expect(md).toContain("- [ ] Busy (in progress)");
+    expect(md).toContain("### Decisions");
+    expect(md).toContain("  - Option: SQLite");
+    expect(md).toContain("### Tests");
+    expect(md).toContain("  - Check: app boots");
+    expect(md).toContain("- [ ] **Login** `/login`");
+    expect(md).toContain("### Deploy steps");
+    expect(md).toContain("### Integrations");
   });
 
   it("never emits trailing spaces or triple blank lines", () => {

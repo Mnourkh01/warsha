@@ -101,6 +101,27 @@ describe("sanitizePlanDoc", () => {
     expect(byId.get("bad-tint")?.tint).toBeUndefined();
   });
 
+  it("validates power fields and gates the list field to its kinds", () => {
+    const out = sanitizePlanDoc(
+      doc({
+        nodes: [
+          node("d", { kind: "decision", acceptance: ["A", "B"], status: "doing", effort: "m" }),
+          node("q", { kind: "test", acceptance: ["boots"] }),
+          node("s", { kind: "screen", path: "/login" }),
+          node("bad", { status: "exploded" as never, effort: "xxl" as never }),
+        ],
+      }),
+    );
+    const byId = new Map(out?.nodes.map((n) => [n.id, n]));
+    expect(byId.get("d")?.acceptance).toEqual(["A", "B"]);
+    expect(byId.get("d")?.status).toBe("doing");
+    expect(byId.get("d")?.effort).toBe("m");
+    expect(byId.get("q")?.acceptance).toEqual(["boots"]);
+    expect(byId.get("s")?.path).toBe("/login");
+    expect(byId.get("bad")?.status).toBeUndefined();
+    expect(byId.get("bad")?.effort).toBeUndefined();
+  });
+
   it("nulls phaseId that does not point at a surviving phase node", () => {
     const out = sanitizePlanDoc(
       doc({
