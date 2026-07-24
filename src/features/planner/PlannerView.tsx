@@ -104,6 +104,9 @@ export function PlannerView() {
   useEffect(() => {
     if (!cwd) return;
     let alive = true;
+    // The dismissal is per workspace+folder: the same draft text in ANOTHER project
+    // must still get its banner.
+    dismissedRef.current = null;
     const check = () => {
       planDraftRead(cwd)
         .then((text) => {

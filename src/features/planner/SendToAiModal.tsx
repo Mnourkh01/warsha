@@ -79,6 +79,10 @@ export function SendToAiModal({
           suggestions: suggestions.filter((_, i) => picked[i]),
         }),
       );
+    } else {
+      // cwd gone while a folder-dependent mode is active: never leave a stale
+      // other-folder prompt in the box (empty full prompt just disables Send).
+      setPrompt(fullPrompt);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, picked, fullPrompt, cwd, planName, suggestions]);
