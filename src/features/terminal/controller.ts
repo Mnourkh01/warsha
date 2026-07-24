@@ -62,6 +62,10 @@ class TerminalController {
   /** When the PTY spawn was issued; a failure exit shortly after gets a help hint. */
   private spawnedAt = 0;
   private ro?: ResizeObserver;
+  /** Deferred attach work (fit + WebGL + scroll restore); cancelled on detach/re-attach. */
+  private pendingAttach: number | null = null;
+  /** Viewport position captured at detach; DOM removal resets the scroll to the top. */
+  private savedScroll: { atBottom: boolean; viewportY: number } | null = null;
   private lastCols = 0;
   private lastRows = 0;
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -207,11 +211,36 @@ class TerminalController {
       this.ro = new ResizeObserver(() => this.fitAndMaybeSpawn());
       this.ro.observe(this.el);
     }
-    // (Re)acquire a WebGL context while visible; detach() released it, so the browser's
-    // ~16-context budget always goes to panes the user can actually see.
-    this.tryWebgl();
     this.paintBg();
-    this.fitAndMaybeSpawn();
+    // Defer sizing + renderer work until the pane has settled layout (double rAF:
+    // react-resizable-panels assigns real sizes after mount). Fitting and creating the
+    // WebGL canvas synchronously here reads a half-laid-out grid, which left the pane
+    // blank or with the content squeezed at the top until the user switched away and
+    // back. The rAF also restores the viewport position: removing the element from the
+    // DOM (workspace/session switch) resets its scroll to the top of the scrollback.
+    if (this.pendingAttach !== null) cancelAnimationFrame(this.pendingAttach);
+    this.pendingAttach = requestAnimationFrame(() => {
+      this.pendingAttach = requestAnimationFrame(() => {
+        this.pendingAttach = null;
+        if (this.disposed || !this.el.isConnected) return;
+        this.fitAndMaybeSpawn();
+        // (Re)acquire a WebGL context while visible; detach() released it, so the
+        // browser's ~16-context budget always goes to panes the user can actually see.
+        this.tryWebgl();
+        const saved = this.savedScroll;
+        this.savedScroll = null;
+        if (saved) {
+          if (saved.atBottom) this.term.scrollToBottom();
+          else this.term.scrollToLine(saved.viewportY);
+        }
+        this.refresh();
+      });
+    });
+  }
+
+  /** Repaint every visible row (no-op before the first fit sized the grid). */
+  private refresh(): void {
+    if (this.term.rows > 0) this.term.refresh(0, this.term.rows - 1);
   }
 
   // xterm (with the WebGL renderer) leaves the viewport DOM background at the CSS default
@@ -228,6 +257,14 @@ class TerminalController {
   /** Detach the element (keeps the instance + PTY alive). Hidden panes give up their
    *  WebGL context (xterm falls back to the DOM renderer) - see attach(). */
   detach(): void {
+    if (this.pendingAttach !== null) {
+      cancelAnimationFrame(this.pendingAttach);
+      this.pendingAttach = null;
+    }
+    if (this.opened && !this.disposed) {
+      const buf = this.term.buffer.active;
+      this.savedScroll = { atBottom: buf.viewportY >= buf.baseY, viewportY: buf.viewportY };
+    }
     this.releaseWebgl();
     if (this.el.parentElement) this.el.parentElement.removeChild(this.el);
   }
@@ -239,6 +276,16 @@ class TerminalController {
   /** Re-measure the grid (font metrics changed, e.g. a devicePixelRatio switch). */
   refit(): void {
     if (this.opened && !this.disposed) this.fitAndMaybeSpawn();
+  }
+
+  /** Document became visible again (window restored from minimize/background): the OS
+   *  may have dropped the WebGL context and rAF work was paused, so re-measure,
+   *  re-acquire WebGL where the budget allows, and repaint. */
+  onDocumentVisible(): void {
+    if (this.disposed || !this.opened || !this.el.isConnected) return;
+    this.fitAndMaybeSpawn();
+    this.tryWebgl();
+    this.refresh();
   }
 
   /** Called when the backend reports the process exited. A failure within seconds of
@@ -291,6 +338,9 @@ class TerminalController {
         addon.dispose();
         this.webgl = undefined;
         webglCount = Math.max(0, webglCount - 1);
+        // Force the DOM renderer to repaint, or the pane sits blank until a resize
+        // (the OS drops GL contexts freely, e.g. while the window is minimized).
+        if (!this.disposed) this.refresh();
       });
       this.term.loadAddon(addon);
       this.webgl = addon;
@@ -470,6 +520,11 @@ function armDprListener(): void {
 // with a real window.
 if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
   armDprListener();
+  // Window restored from minimize: repaint every attached terminal (see onDocumentVisible).
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    for (const c of registry.values()) c.onDocumentVisible();
+  });
 }
 
 export type { TerminalController };

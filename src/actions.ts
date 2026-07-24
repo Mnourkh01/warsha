@@ -52,12 +52,19 @@ export function newSession(spec: {
     spec.workspaceId,
   );
   if (!id) return null; // workspace is full
+  // A leftover maximized pane would render alone and keep the new session invisible
+  // (its TerminalView never mounts, so the shell never even spawns).
+  useUI.getState().setMaximized(null);
   useRuntime.getState().setStatus(id, "running");
   return id;
 }
 
 /** Focus a session, switching to its workspace if needed. */
 export function openSession(id: string): void {
+  const ui = useUI.getState();
+  // Opening a session must actually show it: a stale maximized OTHER pane would keep
+  // the clicked session hidden behind it.
+  if (ui.maximizedSessionId && ui.maximizedSessionId !== id) ui.setMaximized(null);
   useWorkspaces.getState().setActiveSession(id);
   useRuntime.getState().clearAttention(id);
   queueMicrotask(() => getTerminal(id)?.focus());
@@ -143,9 +150,15 @@ export function openTemplate(templateId: string): string | null {
 }
 
 export function switchWorkspace(id: string): void {
-  // Broadcast never follows a workspace change: typing into shells the user is no
-  // longer looking at is exactly the accident the auto-off prevents.
-  if (useWorkspaces.getState().activeWorkspaceId !== id) useUI.getState().setBroadcast(false);
+  if (useWorkspaces.getState().activeWorkspaceId !== id) {
+    const ui = useUI.getState();
+    // Broadcast never follows a workspace change: typing into shells the user is no
+    // longer looking at is exactly the accident the auto-off prevents.
+    ui.setBroadcast(false);
+    // Maximize is a view of the CURRENT grid; carrying it across a switch surprises the
+    // user with a lone full-screen pane when they come back.
+    ui.setMaximized(null);
+  }
   useWorkspaces.getState().setActiveWorkspace(id);
 }
 

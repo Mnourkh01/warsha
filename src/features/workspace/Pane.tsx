@@ -13,6 +13,11 @@ import { useStrings } from "../../lib/i18n";
 export function Pane({ sessionId }: { sessionId: string }) {
   const session = useWorkspaces((s) => s.sessions[sessionId]);
   const active = useWorkspaces((s) => s.activeSessionId === sessionId);
+  // Maximize is pointless with a single pane (it already fills the grid); hide it.
+  const solo = useWorkspaces((s) => {
+    const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
+    return (ws?.sessionIds.length ?? 0) <= 1;
+  });
   const status = useRuntime((s) => s.status[sessionId]);
   const attention = useRuntime((s) => Boolean(s.attention[sessionId]));
   const maximized = useUI((s) => s.maximizedSessionId === sessionId);
@@ -75,17 +80,19 @@ export function Pane({ sessionId }: { sessionId: string }) {
           >
             <FolderInput size={14} />
           </button>
-          <button
-            className="icon-btn sm"
-            title={maximized ? t.restorePane : t.maximizePane}
-            aria-label={maximized ? t.restoreNamed(session.name) : t.maximizeNamed(session.name)}
-            onClick={(e) => {
-              e.stopPropagation();
-              useUI.getState().toggleMaximized(sessionId);
-            }}
-          >
-            {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
+          {!solo && (
+            <button
+              className="icon-btn sm"
+              title={maximized ? t.restorePane : t.maximizePane}
+              aria-label={maximized ? t.restoreNamed(session.name) : t.maximizeNamed(session.name)}
+              onClick={(e) => {
+                e.stopPropagation();
+                useUI.getState().toggleMaximized(sessionId);
+              }}
+            >
+              {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          )}
           <button
             className="icon-btn sm"
             title={t.closeSession}

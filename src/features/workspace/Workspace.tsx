@@ -75,8 +75,9 @@ export function Workspace() {
 
   // Maximized view: one pane fills the grid. The other panes unmount, which only
   // detaches their terminals; PTYs and buffers keep running in the registry (same
-  // model as switching workspaces).
-  if (maximizedId && ids.includes(maximizedId)) {
+  // model as switching workspaces). A single-session workspace ignores maximize -
+  // the lone pane already fills the grid and the state is meaningless there.
+  if (maximizedId && ids.length > 1 && ids.includes(maximizedId)) {
     return (
       <div className="workspace">
         <div style={FILL}>

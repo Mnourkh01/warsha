@@ -6,10 +6,18 @@ const controller = vi.hoisted(() => ({
 }));
 vi.mock("./features/terminal/controller", () => controller);
 
-import { closeSession, deleteWorkspace, newSession, restartSession } from "./actions";
+import {
+  closeSession,
+  deleteWorkspace,
+  newSession,
+  openSession,
+  restartSession,
+  switchWorkspace,
+} from "./actions";
 import { useWorkspaces } from "./store/workspaces";
 import { useRuntime } from "./store/runtime";
 import { useSettings } from "./store/settings";
+import { useUI } from "./store/ui";
 
 // The exact hard-won failure class from CLAUDE.md: a session gone from the UI while its
 // ConPTY child leaks, or a stale "running" dot on a dead pane. These tests pin the
@@ -18,6 +26,7 @@ describe("actions orchestration", () => {
   beforeEach(() => {
     controller.disposeTerminal.mockClear();
     useRuntime.setState({ status: {}, epoch: {} });
+    useUI.setState({ maximizedSessionId: null, broadcast: false });
     useWorkspaces.getState().hydrate({
       workspaces: [{ id: "w1", name: "Workspace 1", sessionIds: [] }],
       sessions: {},
@@ -74,6 +83,34 @@ describe("actions orchestration", () => {
     expect(epochAtDispose).toBe(0);
     expect(useRuntime.getState().epoch[id]).toBe(1);
     expect(useRuntime.getState().status[id]).toBe("running");
+  });
+
+  // Maximize is transient view state; a stale value hid the clicked/created session
+  // behind another pane (the "blank when I come back" class of bug).
+  it("openSession clears a maximized OTHER pane but keeps its own", () => {
+    const a = newSession({ shell: { kind: "cmd" }, name: "a" })!;
+    const b = newSession({ shell: { kind: "cmd" }, name: "b" })!;
+    useUI.getState().setMaximized(a);
+    openSession(a);
+    expect(useUI.getState().maximizedSessionId).toBe(a);
+    openSession(b);
+    expect(useUI.getState().maximizedSessionId).toBeNull();
+  });
+
+  it("newSession un-maximizes so the new pane is actually visible", () => {
+    const a = newSession({ shell: { kind: "cmd" }, name: "a" })!;
+    useUI.getState().setMaximized(a);
+    newSession({ shell: { kind: "cmd" }, name: "b" });
+    expect(useUI.getState().maximizedSessionId).toBeNull();
+  });
+
+  it("switchWorkspace clears maximize (it never follows a workspace change)", () => {
+    const a = newSession({ shell: { kind: "cmd" }, name: "a" })!;
+    const w2 = useWorkspaces.getState().addWorkspace("W2");
+    useWorkspaces.getState().setActiveWorkspace("w1"); // addWorkspace activated w2
+    useUI.getState().setMaximized(a);
+    switchWorkspace(w2);
+    expect(useUI.getState().maximizedSessionId).toBeNull();
   });
 
   it("deleteWorkspace disposes every session it contained", () => {
