@@ -5,6 +5,7 @@ import { useUI } from "../../store/ui";
 import { TerminalView } from "../terminal/TerminalView";
 import { FindBar } from "../terminal/FindBar";
 import { changeSessionFolder, closeSession, openSession } from "../../actions";
+import { tintClasses } from "../../lib/tints";
 import { pickFolder } from "../../lib/ipc";
 import { SessionIcon } from "../icons";
 import { useStrings } from "../../lib/i18n";
@@ -33,7 +34,10 @@ export function Pane({ sessionId }: { sessionId: string }) {
   };
 
   return (
-    <div className={`pane${active ? " active" : ""}`} onMouseDown={() => openSession(sessionId)}>
+    <div
+      className={`pane${active ? " active" : ""}${tintClasses(session.tint)}`}
+      onMouseDown={() => openSession(sessionId)}
+    >
       <div className="pane-header">
         <SessionIcon typeId={session.typeId} size={18} />
         <span

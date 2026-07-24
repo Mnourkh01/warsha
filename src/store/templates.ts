@@ -43,7 +43,7 @@ export const useTemplates = create<TemplatesState>((set, get) => ({
     const sessions: SessionSpec[] = w.sessionIds
       .map((sid) => ws.sessions[sid])
       .filter((s): s is NonNullable<typeof s> => Boolean(s))
-      .map((s) => ({ name: s.name, shell: s.shell, cwd: s.cwd, typeId: s.typeId }))
+      .map((s) => ({ name: s.name, shell: s.shell, cwd: s.cwd, typeId: s.typeId, tint: s.tint }))
       .slice(0, MAX_PER_WS);
     if (sessions.length === 0) return null;
     const tpl: WorkspaceTemplate = {

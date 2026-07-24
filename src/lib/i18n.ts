@@ -56,6 +56,8 @@ const en = {
   renameNamed: (name: string) => `Rename ${name}`,
   closeSession: "Close session",
   closeNamed: (name: string) => `Close ${name}`,
+  changeColor: "Change color",
+  changeColorNamed: (name: string) => `Change color for ${name}`,
   changeFolder: "Change folder (no restart)",
   changeFolderNamed: (name: string) => `Change folder for ${name}`,
   changeFolderTitle: (name: string) => `Choose a new folder for ${name}`,

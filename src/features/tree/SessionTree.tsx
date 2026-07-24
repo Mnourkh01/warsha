@@ -7,6 +7,7 @@ import {
   Layers,
   LayoutTemplate,
   Moon,
+  PaintBucket,
   PanelLeftClose,
   Pencil,
   Plus,
@@ -22,6 +23,7 @@ import { useSettings } from "../../store/settings";
 import { useTemplates } from "../../store/templates";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
+import { nextTint, tintClasses } from "../../lib/tints";
 import { confirmDialog, pickFolder } from "../../lib/ipc";
 import {
   closeSession,
@@ -398,7 +400,7 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
 
   return (
     <div
-      className={`tree-row session-row${active ? " selected" : ""}`}
+      className={`tree-row session-row${active ? " selected" : ""}${tintClasses(session.tint)}`}
       role="button"
       tabIndex={0}
       onClick={() => openSession(id)}
@@ -469,6 +471,14 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
       )}
       {!editing && (
         <span className="row-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="icon-btn sm"
+            title={t.changeColor}
+            aria-label={t.changeColorNamed(session.name)}
+            onClick={() => useWorkspaces.getState().setSessionTint(id, nextTint(session.tint))}
+          >
+            <PaintBucket size={13} />
+          </button>
           <button
             className="icon-btn sm"
             title={t.restart}

@@ -49,6 +49,15 @@
 
   /* Focus ring */
   --ring: #8b7cf6;
+
+  /* Session tints (user-picked accents; ids in lib/tints.ts). Brighter set on dark. */
+  --tint-red: #f87171;
+  --tint-orange: #fb923c;
+  --tint-yellow: #facc15;
+  --tint-green: #4ade80;
+  --tint-cyan: #22d3ee;
+  --tint-blue: #60a5fa;
+  --tint-pink: #f472b6;
 }
 
 :root[data-theme="light"] {
@@ -76,6 +85,15 @@
   --danger: #c9445f;
 
   --ring: #6d4fd6;
+
+  /* Session tints - deeper set so they hold contrast on light surfaces. */
+  --tint-red: #dc2626;
+  --tint-orange: #ea580c;
+  --tint-yellow: #ca8a04;
+  --tint-green: #16a34a;
+  --tint-cyan: #0891b2;
+  --tint-blue: #2563eb;
+  --tint-pink: #db2777;
 }
 
 html,

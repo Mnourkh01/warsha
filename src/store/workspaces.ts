@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ShellKind } from "../lib/types";
+import { isTint, type Tint } from "../lib/tints";
 import { uid } from "../lib/id";
 
 // Workspace-centric model: a Workspace holds up to MAX_PER_WS sessions, tiled in the grid
@@ -9,12 +10,8 @@ import { uid } from "../lib/id";
 export const MAX_PER_WS = 6;
 export const PER_ROW = 3;
 
-export interface Session {
+export interface Session extends SessionSpec {
   id: string;
-  name: string;
-  shell: ShellKind;
-  cwd?: string;
-  typeId?: string;
 }
 
 export interface Workspace {
@@ -38,13 +35,11 @@ interface WsState extends WsPersist {
   renameWorkspace: (id: string, name: string) => void;
   setWorkspaceCwd: (id: string, cwd: string | undefined) => void;
   setActiveWorkspace: (id: string) => void;
-  addSession: (
-    spec: { shell: ShellKind; name: string; cwd?: string; typeId?: string },
-    workspaceId?: string,
-  ) => string | null;
+  addSession: (spec: SessionSpec, workspaceId?: string) => string | null;
   removeSession: (id: string) => void;
   renameSession: (id: string, name: string) => void;
   setSessionCwd: (id: string, cwd: string | undefined) => void;
+  setSessionTint: (id: string, tint: Tint | undefined) => void;
   setActiveSession: (id: string) => void;
   reorderSession: (sessionId: string, toIndex: number) => void;
   moveSessionToWorkspace: (sessionId: string, targetWsId: string) => boolean;
@@ -66,6 +61,8 @@ export interface SessionSpec {
   shell: ShellKind;
   cwd?: string;
   typeId?: string;
+  /** Accent color id (see lib/tints.ts); helps telling panes apart at a glance. */
+  tint?: Tint;
 }
 
 /** Boundary validation for one persisted session spec (same discipline as
@@ -85,11 +82,13 @@ export function sanitizeSessionSpec(raw: unknown): SessionSpec | null {
         (shell.args === undefined ||
           (Array.isArray(shell.args) && shell.args.every((a) => typeof a === "string")))));
   if (!shellOk) return null;
+  const tint = (raw as { tint?: unknown }).tint;
   return {
     name: typeof s.name === "string" && s.name.trim() ? s.name : "Session",
     shell,
     cwd: typeof s.cwd === "string" && s.cwd.trim() ? s.cwd : undefined,
     typeId: typeof s.typeId === "string" ? s.typeId : undefined,
+    tint: isTint(tint) ? tint : undefined,
   };
 }
 
@@ -171,6 +170,7 @@ export const useWorkspaces = create<WsState>((set, get) => {
         shell: spec.shell,
         cwd: spec.cwd,
         typeId: spec.typeId,
+        tint: spec.tint,
       };
       set((s) => ({
         sessions: { ...s.sessions, [id]: session },
@@ -214,6 +214,13 @@ export const useWorkspaces = create<WsState>((set, get) => {
         if (!session) return s;
         const next = cwd && cwd.trim() ? cwd : undefined;
         return { sessions: { ...s.sessions, [id]: { ...session, cwd: next } } };
+      }),
+
+    setSessionTint: (id, tint) =>
+      set((s) => {
+        const session = s.sessions[id];
+        if (!session) return s;
+        return { sessions: { ...s.sessions, [id]: { ...session, tint } } };
       }),
 
     setActiveSession: (id) => {

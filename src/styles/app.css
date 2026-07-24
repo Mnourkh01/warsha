@@ -111,6 +111,23 @@
   overflow-x: hidden;
   padding: 6px 6px 24px;
 }
+/* Session tints: the class pair "tinted tint-<id>" (lib/tints.ts) sets one variable;
+   every tinted surface reads it. Edge bars, not fills - the accent must never fight
+   terminal colors for attention. */
+.tint-red { --session-tint: var(--tint-red); }
+.tint-orange { --session-tint: var(--tint-orange); }
+.tint-yellow { --session-tint: var(--tint-yellow); }
+.tint-green { --session-tint: var(--tint-green); }
+.tint-cyan { --session-tint: var(--tint-cyan); }
+.tint-blue { --session-tint: var(--tint-blue); }
+.tint-pink { --session-tint: var(--tint-pink); }
+.session-row.tinted {
+  box-shadow: inset 3px 0 0 0 var(--session-tint);
+}
+.pane.tinted .pane-header {
+  box-shadow: inset 3px 0 0 0 var(--session-tint);
+}
+
 .tpl-section {
   margin-block-start: 14px;
 }
