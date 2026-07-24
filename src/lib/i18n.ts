@@ -1,11 +1,8 @@
-// App-chrome localization: a typed dictionary per locale, no library. The `en` table
-// is the schema; `ar` must satisfy it, so a missing key is a compile error. Brand and
-// technical terms (PowerShell, Claude Code, SIGINT, terminal) stay in English inside
-// Arabic strings on purpose. The terminal grid itself is NOT localized (xterm is LTR).
-
-import { useSettings } from "../store/settings";
-
-export type Locale = "en" | "ar";
+// App-chrome strings, one typed English table. The Arabic locale switch was removed
+// (2026-07-24): chrome localization was not worth its complexity for a terminal surface
+// that stays LTR English regardless. User-named content (sessions, workspaces) still
+// renders Arabic correctly via dir="auto" / bidi-auto, and terminal OUTPUT keeps its
+// Arabic shaping (arabicGlyphs.ts) - neither depends on a UI locale.
 
 const en = {
   // sidebar header
@@ -130,16 +127,18 @@ const en = {
   clear: "Clear",
   pickerFailed: "Could not open the folder picker. Try again.",
   chooseDefaultFolder: "Choose your default project folder",
-  language: "Language",
 
-  // new session dialog
+  // new session wizard
   whereStart: (label: string) => `Where should ${label} start?`,
+  stepOf: (n: number) => `step ${n} of 3`,
+  pickShellHint: "pick a terminal type",
+  pickAiTitle: "Add an AI assistant?",
+  pickAiHint: (shell: string) => `it will run inside ${shell}`,
+  aiNoneLabel: "Just the shell",
   pickFolderHint: "pick a folder",
-  pickTypeHint: "pick a type, then a folder",
   back: "Back",
-  backToTypes: "Back to session types",
-  shellsGroup: "Shells",
-  aiGroup: "AI agents",
+  backToShells: "Back to terminal types",
+  backToAi: "Back to AI choice",
   notInstalled: (label: string) => `${label} is not installed. Run this to add it:`,
   copy: "Copy",
   copyInstall: "Copy install command",
@@ -152,24 +151,6 @@ const en = {
   workspaceFullMsg: (max: number) =>
     `This workspace already has ${max} sessions. Make a new workspace or close one.`,
   sessionsOpenNote: (max: number) => `Sessions open in the active workspace (up to ${max}).`,
-
-  // chat pane
-  chatPlaceholder: (label: string) => `Message ${label}... (Enter sends, Shift+Enter new line)`,
-  chatSend: "Send",
-  chatStop: "Stop",
-  chatThinking: "Thinking...",
-  chatEmpty: (label: string) => `Ask ${label} about this folder. Arabic renders properly here.`,
-  chatAgentMissing: (agent: string) => `The ${agent} CLI is not installed or not on PATH.`,
-  chatStopped: "Stopped.",
-  chatFailed: (detail: string) => `The request failed: ${detail}`,
-  chatAttachImage: "Attach image",
-  chatAttachTitle: "Choose images to attach",
-  chatRemoveImage: "Remove image",
-  chatDropHint: "Drop images to attach",
-  chatImageDefaultPrompt: "What is in this image?",
-  chatAttachFailed: (detail: string) => `Could not attach the image: ${detail}`,
-  cmdNewClaudeChat: "New Claude chat",
-  cmdNewGeminiChat: "New Gemini chat",
 
   // update toast
   updateAvailable: (version: string) => `Warsha ${version} is available`,
@@ -191,185 +172,12 @@ const en = {
 
 export type Strings = typeof en;
 
-const ar: Strings = {
-  newWorkspace: "مساحة عمل جديدة",
-  newSession: "جلسة جديدة",
-  toggleTheme: "تبديل المظهر",
-  toggleThemeAria: "تبديل بين الفاتح والداكن",
-  settings: "الإعدادات",
-  hideSidebar: "إخفاء الشريط الجانبي (Ctrl+Shift+B)",
-  hideSidebarAria: "إخفاء الشريط الجانبي",
-  showSidebar: "إظهار الشريط الجانبي (Ctrl+Shift+B)",
-  showSidebarAria: "إظهار الشريط الجانبي",
-  treeEmpty: "لا توجد جلسات بعد. اضغط زر + في الأعلى أو Ctrl K لفتح أول terminal.",
-
-  expandWorkspace: "فتح مساحة العمل",
-  collapseWorkspace: "طي مساحة العمل",
-  workspaceName: "اسم مساحة العمل",
-  workspaceFull: (max) => `مساحة العمل ممتلئة (${max})`,
-  newSessionHere: "جلسة جديدة هنا",
-  newSessionIn: (name) => `جلسة جديدة في ${name}`,
-  rename: "إعادة تسمية",
-  renameWorkspaceNamed: (name) => `إعادة تسمية مساحة العمل ${name}`,
-  deleteWorkspace: "حذف مساحة العمل",
-  deleteWorkspaceNamed: (name) => `حذف مساحة العمل ${name}`,
-  deleteWorkspaceConfirm: (name, count) => `حذف "${name}" وإغلاق ${count} جلسة داخلها؟`,
-  sessionsNeedAttention: (n) => `${n} جلسات تحتاج انتباهك`,
-  setWorkspaceFolder: "تحديد مجلد المشروع",
-  setWorkspaceFolderFor: (name) => `تحديد مجلد المشروع لـ ${name}`,
-  workspaceFolderTitle: (path) => `مجلد المشروع: ${path}`,
-  chooseWorkspaceFolder: (name) => `اختر مجلد المشروع لـ ${name}`,
-
-  sessionName: "اسم الجلسة",
-  restart: "إعادة تشغيل",
-  restartNamed: (name) => `إعادة تشغيل ${name}`,
-  renameNamed: (name) => `إعادة تسمية ${name}`,
-  closeSession: "إغلاق الجلسة",
-  closeNamed: (name) => `إغلاق ${name}`,
-  changeFolder: "تغيير المجلد (بدون إعادة تشغيل)",
-  changeFolderNamed: (name) => `تغيير المجلد لـ ${name}`,
-  changeFolderTitle: (name) => `اختر مجلدا جديدا لـ ${name}`,
-  statusRunning: "شغالة",
-  statusExited: "متوقفة",
-  statusIdle: "خاملة",
-  needsAttention: "تحتاج انتباهك",
-  attentionHint: "انتهت أو تنتظر إدخالا",
-  maximizePane: "تكبير اللوحة (Ctrl+Shift+M)",
-  restorePane: "استعادة اللوحة (Ctrl+Shift+M)",
-  maximizeNamed: (name) => `تكبير ${name}`,
-  restoreNamed: (name) => `استعادة ${name}`,
-
-  emptyWorkspaceTitle: "مساحة العمل هذه فارغة.",
-  emptyHintPress: "اضغط",
-  emptyHintOr: "أو زر",
-  emptyHintEnd: "لبدء جلسة.",
-  startClaudeHere: "ابدأ Claude Code هنا",
-
-  findInTerminal: "بحث في الـ terminal",
-  searchText: "نص البحث",
-  findPlaceholder: "ابحث...",
-  prevMatch: "النتيجة السابقة (Shift+Enter)",
-  prevMatchAria: "النتيجة السابقة",
-  nextMatch: "النتيجة التالية (Enter)",
-  nextMatchAria: "النتيجة التالية",
-  closeFindBar: "إغلاق شريط البحث",
-  close: "إغلاق",
-
-  commandPalette: "لوحة الأوامر",
-  searchCommands: "البحث في الأوامر",
-  palettePlaceholder: "اكتب أمرا أو اسم مساحة عمل أو جلسة...",
-  paletteEmpty: "لا توجد أوامر مطابقة.",
-  cmdNewPicker: "جلسة جديدة في مجلد...",
-  cmdNewPs: "جلسة PowerShell جديدة",
-  cmdNewCmd: "جلسة Command Prompt جديدة",
-  cmdNewWsl: "جلسة WSL جديدة",
-  cmdNewBash: "جلسة Bash جديدة",
-  cmdCloseActive: "إغلاق الجلسة النشطة",
-  cmdRestartActive: "إعادة تشغيل الجلسة النشطة",
-  cmdMaximize: "تكبير / استعادة اللوحة النشطة",
-  cmdFontUp: "تكبير خط الـ terminal",
-  cmdFontDown: "تصغير خط الـ terminal",
-  cmdToggleSidebar: "إظهار / إخفاء الشريط الجانبي",
-  cmdShortcuts: "اختصارات لوحة المفاتيح",
-  cmdToggleTheme: "تبديل المظهر فاتح / داكن",
-  cmdSettings: "فتح الإعدادات",
-  cmdSwitchTo: (name) => `الانتقال إلى: ${name}`,
-  cmdOpen: (name) => `فتح: ${name}`,
-  hintLayout: "تخطيط",
-  hintSession: "جلسة",
-  hintWorkspace: "مساحة عمل",
-
-  closeSettings: "إغلاق الإعدادات",
-  appTheme: "مظهر التطبيق",
-  themeDark: "داكن",
-  themeLight: "فاتح",
-  themeSystem: "النظام",
-  terminalColors: "ألوان الـ terminal",
-  terminalColorsHint: "(خلها داكنة حتى تظهر أدوات مثل Claude بشكل صحيح)",
-  matchApp: "مثل التطبيق",
-  terminalFontSize: "حجم خط الـ terminal",
-  smaller: "أصغر",
-  larger: "أكبر",
-  decreaseFont: "تصغير الخط",
-  increaseFont: "تكبير الخط",
-  terminalTextWeight: "سماكة خط الـ terminal",
-  weightNormal: "عادي",
-  weightBold: "عريض",
-  terminalTextColor: "لون نص الـ terminal",
-  themeDefault: "لون المظهر",
-  defaultShellLabel: "الـ shell الافتراضي للجلسات الجديدة",
-  customShell: (program) => `مخصص (${program})`,
-  defaultFolderLabel: "مجلد المشاريع الافتراضي",
-  defaultFolderHint: "(الجلسات الجديدة تبدأ هنا بضغطة واحدة)",
-  notSet: "غير محدد",
-  browse: "استعراض",
-  clear: "مسح",
-  pickerFailed: "تعذر فتح نافذة اختيار المجلد. حاول مرة أخرى.",
-  chooseDefaultFolder: "اختر مجلد مشاريعك الافتراضي",
-  language: "اللغة",
-
-  whereStart: (label) => `أين يبدأ ${label}؟`,
-  pickFolderHint: "اختر مجلدا",
-  pickTypeHint: "اختر النوع ثم المجلد",
-  back: "رجوع",
-  backToTypes: "رجوع لأنواع الجلسات",
-  shellsGroup: "Shells",
-  aiGroup: "أدوات AI",
-  notInstalled: (label) => `${label} غير مثبت. شغل هذا الأمر لإضافته:`,
-  copy: "نسخ",
-  copyInstall: "نسخ أمر التثبيت",
-  checkFailed: (label) => `تعذر التحقق من تثبيت ${label}. حاول مرة أخرى.`,
-  defaultFolderBtn: "المجلد الافتراضي",
-  chooseFolderBtn: "اختر مجلدا...",
-  opensFolderBrowser: "يفتح مستعرض المجلدات",
-  noFolderBtn: "بدون مجلد (يبدأ في home)",
-  chooseFolderFor: (label) => `اختر مجلدا لـ ${label}`,
-  workspaceFullMsg: (max) =>
-    `مساحة العمل فيها ${max} جلسات بالفعل. أنشئ مساحة جديدة أو أغلق جلسة.`,
-  sessionsOpenNote: (max) => `الجلسات تفتح في مساحة العمل النشطة (حتى ${max}).`,
-
-  chatPlaceholder: (label) => `اكتب رسالة لـ ${label}... (Enter للإرسال، Shift+Enter لسطر جديد)`,
-  chatSend: "إرسال",
-  chatStop: "إيقاف",
-  chatThinking: "يفكر...",
-  chatEmpty: (label) => `اسأل ${label} عن هذا المجلد. العربية تظهر هنا بشكل صحيح.`,
-  chatAgentMissing: (agent) => `أداة ${agent} غير مثبتة أو ليست على PATH.`,
-  chatStopped: "توقف.",
-  chatFailed: (detail) => `فشل الطلب: ${detail}`,
-  chatAttachImage: "إرفاق صورة",
-  chatAttachTitle: "اختر صورا للإرفاق",
-  chatRemoveImage: "إزالة الصورة",
-  chatDropHint: "أفلت الصور لإرفاقها",
-  chatImageDefaultPrompt: "شو في بهالصورة؟",
-  chatAttachFailed: (detail) => `تعذر إرفاق الصورة: ${detail}`,
-  cmdNewClaudeChat: "دردشة Claude جديدة",
-  cmdNewGeminiChat: "دردشة Gemini جديدة",
-
-  updateAvailable: (version) => `يتوفر إصدار جديد Warsha ${version}`,
-  updateDownload: "تحميل",
-  updateLater: "لاحقا",
-
-  keyboardShortcuts: "اختصارات لوحة المفاتيح",
-  closeShortcuts: "إغلاق الاختصارات",
-  scPalette: "لوحة الأوامر",
-  scSidebar: "إظهار / إخفاء الشريط الجانبي",
-  scFind: "بحث في الـ terminal النشط",
-  scMaximize: "تكبير / استعادة اللوحة النشطة",
-  scCopy: "نسخ التحديد في الـ terminal",
-  scPaste: "لصق في الـ terminal",
-  scEscape: "إغلاق أعلى نافذة أو شريط البحث",
-  scSigint: "يبقى SIGINT للـ shell (ليس نسخا)",
-};
-
-const LOCALES: Record<Locale, Strings> = { en, ar };
-
-/** Reactive strings for components: re-renders when the locale setting changes. */
+/** Strings for components. Kept as a hook-shaped helper so a future locale could return. */
 export function useStrings(): Strings {
-  const locale = useSettings((s) => s.locale);
-  return LOCALES[locale];
+  return en;
 }
 
-/** Non-reactive strings for actions and native dialog titles. */
+/** Strings for actions and native dialog titles (non-component call sites). */
 export function strings(): Strings {
-  return LOCALES[useSettings.getState().locale];
+  return en;
 }

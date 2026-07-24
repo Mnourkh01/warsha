@@ -8,7 +8,7 @@ Desktop terminal-workspace app. Tauri v2 + React/TS. See `PLAN.md` for product +
 - **Shell:** Tauri v2 (Rust core + Windows WebView2).
 - **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS. State: Zustand.
 - **Terminal:** xterm.js (`@xterm/xterm`) + addons: fit, webgl, web-links, unicode11,
-  search, serialize (serialize = snapshot/restore for suspended hidden panes).
+  search.
 - **PTY:** custom thin Rust layer over `portable-pty` 0.9.0 (wraps Windows ConPTY out of
   the box), one ConPTY + reader thread per session. Output streams to the WebView over a
   per-session `tauri::ipc::Channel<&[u8]>` (NOT events). Switch to the `portable-pty-psmux`
@@ -58,9 +58,10 @@ pnpm lint               # tsc --noEmit (typecheck only; eslint is not configured
   hide and fall back to the DOM renderer; handle `onContextLoss`.
 - **Font-metrics race:** `await document.fonts.ready` before `Terminal.open()`, then
   re-`fit()` on font load, or the grid misaligns.
-- **Hidden-pane suspend:** keep the `Terminal` alive but `display:none` (xterm pauses
-  rendering, buffer keeps filling from the Channel). For long-idle panes, snapshot with
-  `SerializeAddon` + dispose, restore on focus.
+- **Hidden-pane suspend:** keep the `Terminal` alive but detached (xterm pauses
+  rendering, buffer keeps filling from the Channel). A `SerializeAddon` snapshot+dispose
+  scheme for long-idle panes is a possible future optimization - NOT implemented; do not
+  add the dependency until it is.
 - **Process lifecycle:** track child PIDs; kill the process tree on app exit AND on pane
   close, or ConPTY children leak.
 - **Copy/paste + input:** `Ctrl+C` is SIGINT, map copy to `Ctrl+Shift+C`; enable bracketed
@@ -69,12 +70,15 @@ pnpm lint               # tsc --noEmit (typecheck only; eslint is not configured
 
 ## Arabic / RTL rules
 
-- App chrome must render correctly in both LTR and RTL. Use CSS logical properties
-  (`margin-inline`, `padding-inline`, `inset-inline`) so a `dir` flip just works.
+- App chrome is English-only (the locale switch was removed 2026-07-24; it added
+  complexity without helping the terminal surface). Keep CSS logical properties
+  (`margin-inline`, `padding-inline`, `inset-inline`) so a future `dir` flip stays cheap.
 - User-named content (session/group names) uses `dir="auto"` + `unicode-bidi: plaintext`
-  so Arabic names go RTL and English stay LTR, mixed lines not reversed.
-- Do NOT attempt to "fix" Arabic inside the raw xterm grid - unsolved in every terminal;
-  scoped out of v1. The Stable-phase AI chat pane is the real Arabic reading surface.
+  so Arabic names go RTL and English stay LTR, mixed lines not reversed. This stays.
+- Terminal OUTPUT Arabic shaping (arabicGlyphs.ts presentation forms) stays - it is
+  independent of any UI locale.
+- Do NOT attempt to "fix" Arabic bidi inside the raw xterm grid - unsolved in every
+  terminal; scoped out.
 
 ## Verification (nothing is "done" until verified)
 

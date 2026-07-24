@@ -7,19 +7,19 @@ import { terminalThemeFor } from "../terminal/theme";
 import { termScheme } from "../../actions";
 import { pickFolder } from "../../lib/ipc";
 import { DialogTrap } from "../../lib/dialog-trap";
-import { useStrings, type Locale } from "../../lib/i18n";
+import { useStrings } from "../../lib/i18n";
+import { SHELL_TYPES } from "../../lib/sessionTypes";
 import type { ShellKind, ThemeMode } from "../../lib/types";
 
 const THEMES: ThemeMode[] = ["dark", "light", "system"];
 const TERM_THEMES: TerminalTheme[] = ["dark", "light", "match"];
-// Bash is a "custom" shell (Git Bash / WSL bash on PATH), so it carries its full ShellKind
-// here rather than just a kind string, and the dropdown sets the whole object.
-const SHELLS: { value: string; label: string; shell: ShellKind }[] = [
-  { value: "powershell", label: "PowerShell", shell: { kind: "powershell" } },
-  { value: "cmd", label: "Command Prompt", shell: { kind: "cmd" } },
-  { value: "wsl", label: "WSL", shell: { kind: "wsl" } },
-  { value: "bash", label: "Bash", shell: { kind: "custom", program: "bash.exe", args: ["-i", "-l"] } },
-];
+// One source of truth with the new-session wizard: the dropdown offers exactly the
+// wizard's shell catalog (bash carries its full custom ShellKind, not just a kind string).
+const SHELLS: { value: string; label: string; shell: ShellKind }[] = SHELL_TYPES.map((s) => ({
+  value: s.id,
+  label: s.label,
+  shell: s.shell,
+}));
 
 export function SettingsDialog() {
   const open = useUI((s) => s.settingsOpen);
@@ -31,7 +31,6 @@ export function SettingsDialog() {
   const termForeground = useSettings((s) => s.termForeground);
   const defaultShell = useSettings((s) => s.defaultShell);
   const defaultCwd = useSettings((s) => s.defaultCwd);
-  const locale = useSettings((s) => s.locale);
   const t = useStrings();
   const boxRef = useRef<HTMLDivElement>(null);
   const [pickError, setPickError] = useState<string | null>(null);
@@ -86,21 +85,6 @@ export function SettingsDialog() {
           </button>
         </div>
         <div className="dialog-body">
-          <div className="field">
-            <span className="field-label">{t.language}</span>
-            <div className="seg">
-              {(["en", "ar"] as Locale[]).map((l) => (
-                <button
-                  key={l}
-                  className={locale === l ? "on" : ""}
-                  onClick={() => useSettings.getState().setLocale(l)}
-                >
-                  {l === "en" ? "English" : "العربية"}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="field">
             <span className="field-label">{t.appTheme}</span>
             <div className="seg">

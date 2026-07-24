@@ -39,13 +39,9 @@ describe("settings hydrate sanitization", () => {
     expect(useSettings.getState().defaultShell).toEqual({ kind: "powershell" });
   });
 
-  it("accepts only known locales, falls back to English", () => {
-    useSettings.getState().hydrate({ locale: "ar" });
-    expect(useSettings.getState().locale).toBe("ar");
-    useSettings.getState().hydrate({ locale: "fr" as never });
-    expect(useSettings.getState().locale).toBe("en");
-    useSettings.getState().hydrate({});
-    expect(useSettings.getState().locale).toBe("en");
+  it("ignores unknown persisted fields (e.g. the removed locale setting)", () => {
+    useSettings.getState().hydrate({ locale: "ar" } as never);
+    expect("locale" in useSettings.getState().serialize()).toBe(false);
   });
 
   it("normalizes optional strings and booleans", () => {

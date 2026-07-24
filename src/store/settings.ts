@@ -12,8 +12,6 @@ interface SettingsPersist {
   fontSize: number;
   defaultShell: ShellKind;
   defaultCwd?: string;
-  /** App chrome language. The terminal grid itself always stays LTR. */
-  locale: "en" | "ar";
   /** Optional terminal text-color override for DEFAULT (uncolored) text only - does not
    *  touch a CLI's own ANSI colors. Empty = use the theme foreground. */
   termForeground?: string;
@@ -29,7 +27,6 @@ interface SettingsState extends SettingsPersist {
   setDefaultCwd: (c: string) => void;
   setTermForeground: (c: string | undefined) => void;
   setTermBold: (b: boolean) => void;
-  setLocale: (l: "en" | "ar") => void;
   hydrate: (data: Partial<SettingsPersist>) => void;
   serialize: () => SettingsPersist;
 }
@@ -42,7 +39,6 @@ const DEFAULTS: SettingsPersist = {
   defaultCwd: undefined,
   termForeground: undefined,
   termBold: false,
-  locale: "en",
 };
 
 const THEMES: readonly ThemeMode[] = ["dark", "light", "system"];
@@ -75,8 +71,7 @@ function sanitize(data: Partial<SettingsPersist> | undefined): SettingsPersist {
   const termForeground =
     typeof d.termForeground === "string" && d.termForeground.trim() ? d.termForeground : undefined;
   const termBold = typeof d.termBold === "boolean" ? d.termBold : DEFAULTS.termBold;
-  const locale = d.locale === "ar" ? "ar" : "en";
-  return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold, locale };
+  return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold };
 }
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -89,20 +84,11 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setTermForeground: (termForeground) =>
     set({ termForeground: termForeground && termForeground.trim() ? termForeground : undefined }),
   setTermBold: (termBold) => set({ termBold }),
-  setLocale: (locale) => set({ locale }),
   hydrate: (data) => set(sanitize(data)),
   serialize: () => {
-    const {
-      theme,
-      terminalTheme,
-      fontSize,
-      defaultShell,
-      defaultCwd,
-      termForeground,
-      termBold,
-      locale,
-    } = get();
-    return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold, locale };
+    const { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold } =
+      get();
+    return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold };
   },
 }));
 

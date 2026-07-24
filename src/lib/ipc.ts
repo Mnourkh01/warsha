@@ -7,7 +7,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { CloseRequestedEvent } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { ShellKind } from "./types";
 
@@ -61,34 +61,6 @@ export function onPtyExit(cb: (id: string, code: number) => void): Promise<Unlis
   );
 }
 
-export interface AgentSendOpts {
-  /** Chat session id (one in-flight request per session). */
-  id: string;
-  agent: "claude" | "gemini";
-  prompt: string;
-  /** Provider conversation id to continue (Claude resume). */
-  resume?: string;
-  cwd?: string;
-  /** Staged image paths (from `stageChatImage`) to attach to this turn. */
-  images?: string[];
-}
-
-/** Run one headless AI-CLI request; `onChunk` streams raw stdout text. Resolves with
- *  the exit code, rejects with `agent_*` errors (missing CLI, busy, cancelled, failed). */
-export async function agentSend(
-  opts: AgentSendOpts,
-  onChunk: (text: string) => void,
-): Promise<number> {
-  const channel = new Channel<string>();
-  channel.onmessage = (msg) => onChunk(String(msg));
-  return await invoke<number>("agent_send", { opts, onOutput: channel });
-}
-
-/** Cancel a chat session's in-flight request (kills the CLI process). */
-export async function agentCancel(id: string): Promise<void> {
-  await invoke("agent_cancel", { id });
-}
-
 export interface UpdateInfo {
   version: string;
   url: string;
@@ -110,33 +82,6 @@ export async function pickFolder(title?: string): Promise<string | null> {
   return typeof res === "string" ? res : null;
 }
 
-/** Image extensions the chat can attach (must match the Rust ALLOWED_EXT list). */
-export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp"] as const;
-
-export interface StagedImage {
-  /** Absolute (forward-slashed) path of the staged copy, safe for the CLI. */
-  path: string;
-  /** Original filename, shown as the attachment chip label. */
-  name: string;
-}
-
-/** Copy a dropped/picked image into the app's chat-image cache; returns its staged path. */
-export async function stageChatImage(src: string): Promise<StagedImage> {
-  return await invoke<StagedImage>("stage_chat_image", { src });
-}
-
-/** Native image picker (multi-select). Returns chosen absolute paths, or []. */
-export async function pickImages(title?: string): Promise<string[]> {
-  const res = await openDialog({
-    directory: false,
-    multiple: true,
-    title,
-    filters: [{ name: "Images", extensions: [...IMAGE_EXTENSIONS] }],
-  });
-  if (Array.isArray(res)) return res;
-  return typeof res === "string" ? [res] : [];
-}
-
 export interface FileDropEvent {
   kind: "enter" | "over" | "drop" | "leave";
   /** Absolute paths being dropped (present on enter/drop). */
@@ -146,8 +91,11 @@ export interface FileDropEvent {
 }
 
 /** OS file drag-and-drop onto the window. Tauri intercepts native file drops (the WebView
- *  never sees an HTML5 `drop` for real files), so this event is the only way to get them. */
-export function onWebviewFileDrop(handler: (e: FileDropEvent) => void): Promise<UnlistenFn> {
+ *  never sees an HTML5 `drop` for real files), so this event is the only way to get them.
+ *  `async` on purpose: outside Tauri getCurrentWebview() THROWS synchronously, and the
+ *  async wrapper turns that into a rejection callers can absorb (a throw inside a React
+ *  effect would unmount the whole app). */
+export async function onWebviewFileDrop(handler: (e: FileDropEvent) => void): Promise<UnlistenFn> {
   return getCurrentWebview().onDragDropEvent((event) => {
     const p = event.payload as {
       type: FileDropEvent["kind"];
@@ -204,8 +152,35 @@ export async function openExternal(url: string): Promise<void> {
   await openUrl(url);
 }
 
-/** Run `handler` when the user asks to close the window. Returns an unlisten fn. */
-export function onWindowCloseRequested(
+/** Show a local path in Explorer (select the item in its folder). Deliberately NEVER
+ *  opens the file with its default handler - terminal output is untrusted and a path
+ *  can point at an executable. */
+export async function revealPath(path: string): Promise<void> {
+  await revealItemInDir(path);
+}
+
+/** Pin the window (and the WebView2 color scheme with it) to a theme; null = follow the OS.
+ *  On Windows this is the ONLY reliable way to track the OS theme - see src/lib/theme.ts. */
+export async function setWindowTheme(theme: "dark" | "light" | null): Promise<void> {
+  await getCurrentWindow().setTheme(theme);
+}
+
+/** The window's resolved theme ("dark"/"light"), or null when unknown. */
+export async function windowTheme(): Promise<"dark" | "light" | null> {
+  return await getCurrentWindow().theme();
+}
+
+/** Fires when the resolved window theme changes (only while not pinned by setWindowTheme). */
+export function onWindowThemeChanged(
+  cb: (theme: "dark" | "light") => void,
+): Promise<UnlistenFn> {
+  return getCurrentWindow().onThemeChanged(({ payload }) => cb(payload));
+}
+
+/** Run `handler` when the user asks to close the window. Returns an unlisten fn.
+ *  `async` on purpose: outside Tauri getCurrentWindow() THROWS synchronously, and the
+ *  async wrapper turns that into a rejection the caller's .catch can absorb. */
+export async function onWindowCloseRequested(
   handler: (event: CloseRequestedEvent) => void | Promise<void>,
 ): Promise<UnlistenFn> {
   return getCurrentWindow().onCloseRequested(handler);

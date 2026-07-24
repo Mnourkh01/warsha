@@ -4,7 +4,6 @@ import { useRuntime } from "../../store/runtime";
 import { useUI } from "../../store/ui";
 import { TerminalView } from "../terminal/TerminalView";
 import { FindBar } from "../terminal/FindBar";
-import { ChatPane } from "../chat/ChatPane";
 import { changeSessionFolder, closeSession, openSession } from "../../actions";
 import { pickFolder } from "../../lib/ipc";
 import { SessionIcon } from "../icons";
@@ -89,14 +88,8 @@ export function Pane({ sessionId }: { sessionId: string }) {
         </span>
       </div>
       <div className="pane-body">
-        {session.agent ? (
-          <ChatPane sessionId={sessionId} />
-        ) : (
-          <>
-            {findOpen && <FindBar sessionId={sessionId} />}
-            <TerminalView sessionId={sessionId} active={active} />
-          </>
-        )}
+        {findOpen && <FindBar sessionId={sessionId} />}
+        <TerminalView sessionId={sessionId} active={active} />
       </div>
     </div>
   );

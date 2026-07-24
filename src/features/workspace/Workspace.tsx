@@ -5,7 +5,7 @@ import { paneRows, useWorkspaces } from "../../store/workspaces";
 import { useUI } from "../../store/ui";
 import { newSession } from "../../actions";
 import { whichProgram } from "../../lib/ipc";
-import { SESSION_TYPES } from "../../lib/sessionTypes";
+import { AI_TYPES, SHELL_TYPES, buildShell } from "../../lib/sessionTypes";
 import { SessionIcon } from "../icons";
 import { Pane } from "./Pane";
 import { useStrings } from "../../lib/i18n";
@@ -18,16 +18,16 @@ function StartClaudeButton() {
   const [busy, setBusy] = useState(false);
   const t = useStrings();
   const start = async () => {
-    const claude = SESSION_TYPES.find((t) => t.id === "claude");
+    const claude = AI_TYPES.find((a) => a.id === "claude");
     if (!claude) return;
     setBusy(true);
     try {
-      const found = claude.probe ? await whichProgram(claude.probe) : "ok";
-      if (found) {
+      if (await whichProgram(claude.cli)) {
         // No explicit cwd: newSession falls back to the workspace's project folder,
-        // then the global default.
+        // then the global default. PowerShell host: the quick button stays deterministic;
+        // the wizard is where shell choice lives.
         newSession({
-          shell: claude.shell,
+          shell: buildShell(SHELL_TYPES[0], claude),
           name: claude.label,
           typeId: claude.id,
         });

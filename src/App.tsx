@@ -10,11 +10,19 @@ import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useWorkspaces } from "./store/workspaces";
 import { useUI } from "./store/ui";
 import { useRuntime } from "./store/runtime";
-import { applyTheme, resolveTheme } from "./lib/theme";
+import { applyTheme, resolveTheme, setSystemTheme } from "./lib/theme";
 import { applySettingsToAll, getTerminal } from "./features/terminal/controller";
 import { noteExit } from "./features/terminal/attention";
 import { useStrings } from "./lib/i18n";
-import { checkForUpdate, onPtyExit, openExternal, type UpdateInfo } from "./lib/ipc";
+import {
+  checkForUpdate,
+  onPtyExit,
+  onWindowThemeChanged,
+  openExternal,
+  setWindowTheme,
+  windowTheme,
+  type UpdateInfo,
+} from "./lib/ipc";
 
 // Browser accelerators WebView2 would otherwise hijack from app chrome:
 // print, find, view-source, save, downloads, find-next.
@@ -59,40 +67,46 @@ const ZOOM_CODES = new Set(["Equal", "Minus", "Digit0", "NumpadAdd", "NumpadSubt
 export default function App() {
   const theme = useSettings((s) => s.theme);
   const terminalTheme = useSettings((s) => s.terminalTheme);
-  const locale = useSettings((s) => s.locale);
   const sidebarOpen = useUI((s) => s.sidebarOpen);
   const t = useStrings();
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
 
-  // Keep <html data-theme> synced with the app theme, and terminals synced with the
-  // (independent) terminal color scheme.
+  // Keep <html data-theme> + terminals synced with the app theme. "System" must go through
+  // the Tauri window API: wry pins the WebView2 color scheme to the window theme, so
+  // matchMedia cannot see the OS preference (it reports the pin). setTheme(null) un-pins,
+  // theme() reads the resolved OS value, onThemeChanged follows live OS switches.
   useEffect(() => {
-    applyTheme(theme);
-    applySettingsToAll({ theme: resolveTerminalTheme(terminalTheme, resolveTheme(theme)) });
-  }, [theme, terminalTheme]);
-
-  // App chrome direction follows the locale; the terminal grid itself stays LTR (a CSS
-  // rule on .term-host, xterm cannot render RTL).
-  useEffect(() => {
-    document.documentElement.lang = locale;
-    document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
-  }, [locale]);
-
-  // Follow the OS theme while in "system" mode.
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    const sync = () => {
+      if (cancelled) return;
       const s = useSettings.getState();
-      if (s.theme === "system") {
-        applyTheme("system");
-        applySettingsToAll({
-          theme: resolveTerminalTheme(s.terminalTheme, resolveTheme("system")),
-        });
-      }
+      applyTheme(s.theme);
+      // Route terminals through applySettingsToAll so paintBg() repaints viewport
+      // backgrounds too, not just <html data-theme>.
+      applySettingsToAll({ theme: resolveTerminalTheme(s.terminalTheme, resolveTheme(s.theme)) });
     };
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
+    setWindowTheme(theme === "system" ? null : theme)
+      .then(async () => {
+        if (theme !== "system") return;
+        const os = await windowTheme();
+        if (os) setSystemTheme(os);
+        const u = await onWindowThemeChanged((t2) => {
+          setSystemTheme(t2);
+          sync();
+        });
+        if (cancelled) u();
+        else unlisten = u;
+      })
+      .catch(() => {
+        /* outside Tauri (tests, plain browser): theme.ts matchMedia seed applies */
+      })
+      .finally(sync);
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [theme, terminalTheme]);
 
   // Mark sessions exited and print a notice when their process ends.
   useEffect(() => {

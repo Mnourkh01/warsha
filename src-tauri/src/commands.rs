@@ -5,8 +5,6 @@ use serde_json::Value;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::agent::{self, AgentManager, AgentSendOpts};
-use crate::images::{self, StagedImage};
 use crate::pty::{PtyManager, SpawnOpts};
 use crate::session;
 use crate::update;
@@ -81,33 +79,6 @@ pub fn session_state_save(app: AppHandle, state: Value) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn session_state_backup(app: AppHandle, label: String) -> Result<(), String> {
     session::backup(&app, &label)
-}
-
-/// Run one headless AI-CLI request for the chat pane, streaming stdout chunks.
-/// Blocks until the process exits, hence `async` (thread pool, never the main thread).
-#[tauri::command(async)]
-pub fn agent_send(
-    app: AppHandle,
-    manager: State<'_, AgentManager>,
-    opts: AgentSendOpts,
-    on_output: Channel<String>,
-) -> Result<i32, String> {
-    // Confine image `--add-dir` grants to the app-owned staging cache (see agent::validate_image).
-    let allowed_images_dir = images::images_dir_path(&app);
-    agent::send(&manager, opts, allowed_images_dir, on_output)
-}
-
-/// Cancel a chat session's in-flight request (kills the CLI process).
-#[tauri::command(async)]
-pub fn agent_cancel(manager: State<'_, AgentManager>, id: String) -> Result<(), String> {
-    agent::cancel(&manager, &id)
-}
-
-/// Copy a dropped/picked image into the app's chat-image cache and return its staged path
-/// + display name. `async` because it touches the disk.
-#[tauri::command(async)]
-pub fn stage_chat_image(app: AppHandle, src: String) -> Result<StagedImage, String> {
-    images::stage(&app, &src)
 }
 
 /// Check GitHub for a newer release (via the user's gh CLI). None = up to date or

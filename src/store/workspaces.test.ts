@@ -69,6 +69,31 @@ describe("workspaces store", () => {
     expect(useWorkspaces.getState().workspaceOf(id)).toBe(w2);
   });
 
+  it("hydrate drops malformed sessions and strips unknown fields (legacy agent flag)", () => {
+    useWorkspaces.getState().hydrate({
+      workspaces: [{ id: "a", name: "A", sessionIds: ["good", "badShell", "legacyChat"] }],
+      sessions: {
+        good: { id: "good", name: "OK", shell: { kind: "cmd" } },
+        badShell: { id: "badShell", name: "Bad", shell: { kind: "rocket" } },
+        legacyChat: {
+          id: "legacyChat",
+          name: "Claude Chat",
+          shell: { kind: "powershell" },
+          typeId: "claude-chat",
+          agent: "claude",
+        },
+      } as never,
+      activeWorkspaceId: "a",
+    });
+    const st = useWorkspaces.getState();
+    // The malformed shell never reaches pty_spawn; the legacy chat session survives as a
+    // plain terminal with its unknown `agent` field dropped by reconstruction.
+    expect(st.workspaces[0].sessionIds).toEqual(["good", "legacyChat"]);
+    expect(st.sessions.badShell).toBeUndefined();
+    expect("agent" in st.sessions.legacyChat).toBe(false);
+    expect(st.sessions.legacyChat.shell).toEqual({ kind: "powershell" });
+  });
+
   it("hydrate keeps a duplicated session id in the FIRST workspace only", () => {
     useWorkspaces.getState().hydrate({
       workspaces: [

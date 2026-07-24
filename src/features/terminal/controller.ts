@@ -24,6 +24,7 @@ import type { ShellKind } from "../../lib/types";
 import { useRuntime } from "../../store/runtime";
 import { dropTracking, noteOutput } from "./attention";
 import { shapeArabicVisual } from "./arabicGlyphs";
+import { ExtraLinksProvider } from "./links";
 import { terminalBg, terminalThemeFor } from "./theme";
 
 export interface TerminalOpts {
@@ -54,6 +55,9 @@ class TerminalController {
   private spawned = false;
   private spawnFailed = false;
   private disposed = false;
+  /** In-flight ptySpawn, settle-safe. dispose() awaits it so the kill can never race a
+   *  spawn that has not registered in Rust yet (which would orphan a live ConPTY). */
+  private spawnSettled: Promise<void> | null = null;
   private ro?: ResizeObserver;
   private lastCols = 0;
   private lastRows = 0;
@@ -83,6 +87,13 @@ class TerminalController {
       cursorBlink: true,
       scrollback: 8000,
       theme: terminalThemeFor(opts.theme, opts.foreground),
+      // OSC 8 hyperlinks (modern CLIs, incl. Claude Code, emit these). Same untrusted-
+      // output rule as WebLinksAddon below: only http(s) leaves the app, system browser.
+      linkHandler: {
+        activate: (_event, uri) => {
+          void openExternal(uri);
+        },
+      },
     });
 
     this.fitAddon = new FitAddon();
@@ -99,6 +110,8 @@ class TerminalController {
     const unicode = new Unicode11Addon();
     this.term.loadAddon(unicode);
     this.term.unicode.activeVersion = "11";
+    // Bare www. domains + Windows paths (revealed in Explorer, never executed).
+    this.term.registerLinkProvider(new ExtraLinksProvider(this.term));
 
     this.term.onData((data) => {
       // Dead-session rejections stay silent (the exit notice is already printed), but a
@@ -114,22 +127,26 @@ class TerminalController {
       });
     });
 
-    // Ctrl+C is SIGINT in a shell, so copy/paste use Ctrl+Shift+C / Ctrl+Shift+V plus the
-    // console-standard Ctrl+Insert / Shift+Insert. Clipboard I/O goes through the Rust
-    // plugin (clipboardReadText/WriteText), not navigator.clipboard - WebView2 blocks
-    // clipboard READ from the WebView, which is why paste silently did nothing before.
+    // Ctrl+C stays SIGINT; copy is Ctrl+Shift+C / Ctrl+Insert. Paste is Ctrl+V (Windows
+    // Terminal parity), Ctrl+Shift+V, and Shift+Insert. Clipboard I/O goes through the
+    // Rust plugin (clipboardReadText/WriteText), not navigator.clipboard - WebView2
+    // blocks clipboard READ from the WebView, which is why paste silently did nothing
+    // before. When Ctrl+V finds NO text (e.g. the clipboard holds an image), the ^V byte
+    // is forwarded to the PTY instead so a TUI like Claude Code can grab the image
+    // itself. Apps that want a literal ^V with text on the clipboard use Ctrl+Q (readline
+    // quoted-insert), same tradeoff as Windows Terminal.
     this.term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       const copy =
         (e.ctrlKey && e.shiftKey && e.code === "KeyC") || (e.ctrlKey && e.code === "Insert");
       const paste =
-        (e.ctrlKey && e.shiftKey && e.code === "KeyV") || (e.shiftKey && e.code === "Insert");
+        (e.ctrlKey && !e.altKey && e.code === "KeyV") || (e.shiftKey && e.code === "Insert");
       if (copy) {
         this.copySelection();
         return false;
       }
       if (paste) {
-        this.pasteClipboard();
+        this.pasteClipboard(e.ctrlKey && !e.shiftKey);
         return false;
       }
       return true;
@@ -153,14 +170,25 @@ class TerminalController {
     if (sel) void clipboardWriteText(sel).catch((err) => console.warn("clipboard copy failed", err));
   }
 
-  private pasteClipboard(): void {
+  /** Paste clipboard text; with `forwardWhenEmpty`, a text-less clipboard (image, files)
+   *  sends a literal ^V to the PTY so the running TUI can read the clipboard itself. */
+  private pasteClipboard(forwardWhenEmpty = false): void {
+    const forward = () => {
+      if (!this.disposed) void ptyWrite(this.sessionId, "\x16").catch(() => {});
+    };
     void clipboardReadText()
       .then((t) => {
+        if (this.disposed) return;
         // paste() honors bracketed-paste (mode 2004) when the app enabled it, so a
         // multi-line snippet does not execute line-by-line in vim/REPLs.
-        if (t && !this.disposed) this.term.paste(t);
+        if (t) this.term.paste(t);
+        else if (forwardWhenEmpty) forward();
       })
-      .catch((err) => console.warn("clipboard paste failed", err));
+      .catch((err) => {
+        // The keystroke must never be swallowed outright: fall through to the PTY.
+        console.warn("clipboard paste failed", err);
+        if (forwardWhenEmpty) forward();
+      });
   }
 
   /** Move the terminal element into a pane container and ensure it is running. */
@@ -299,7 +327,7 @@ class TerminalController {
 
   private spawn(cols: number, rows: number): void {
     this.spawned = true;
-    ptySpawn(
+    const inflight = ptySpawn(
       { id: this.sessionId, shell: this.opts.shell, cwd: this.opts.cwd, cols, rows },
       (bytes) => {
         // Guard: in-flight Channel bytes can arrive after dispose (xterm throws on a
@@ -312,7 +340,12 @@ class TerminalController {
           noteOutput(this.sessionId, bytes.length);
         }
       },
-    )
+    );
+    this.spawnSettled = inflight.then(
+      () => undefined,
+      () => undefined,
+    );
+    inflight
       .then(() => {
         if (this.disposed) return;
         // The grid may have changed while the spawn was in flight; those resizes hit a
@@ -329,24 +362,30 @@ class TerminalController {
       })
       .catch((err) => {
         // Spawn failed: mark it so resize traffic stops, and correct the status dot
-        // (newSession optimistically set it to "running").
+        // (newSession optimistically set it to "running"). A DISPOSED controller must
+        // not touch the runtime store - the session is gone and a write here would
+        // resurrect its key as a permanent zombie entry.
         this.spawnFailed = true;
-        useRuntime.getState().setStatus(this.sessionId, "exited");
         if (!this.disposed) {
+          useRuntime.getState().setStatus(this.sessionId, "exited");
           this.term.write(`\r\n\x1b[38;5;203mFailed to start shell: ${String(err)}\x1b[0m\r\n`);
         }
       });
   }
 
   /** Tear down the terminal + PTY. Resolves once the backend kill has been processed,
-   *  so callers can safely respawn under the same session id. */
+   *  so callers can safely respawn under the same session id. The kill waits for any
+   *  in-flight spawn to settle first: killing before the Rust side registered the
+   *  session was a no-op that left the new ConPTY alive and the id poisoned. */
   dispose(): Promise<void> {
     this.disposed = true;
     dropTracking(this.sessionId);
     this.ro?.disconnect();
     if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.releaseWebgl();
-    const killed = ptyKill(this.sessionId).catch(() => {});
+    const killed = (this.spawnSettled ?? Promise.resolve())
+      .then(() => ptyKill(this.sessionId))
+      .catch(() => {});
     this.term.dispose();
     this.detach();
     return killed;
@@ -397,6 +436,10 @@ function armDprListener(): void {
     { once: true },
   );
 }
-armDprListener();
+// Module also loads in non-browser contexts (vitest); the listener only makes sense
+// with a real window.
+if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  armDprListener();
+}
 
 export type { TerminalController };

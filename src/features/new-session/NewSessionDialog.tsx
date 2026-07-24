@@ -1,19 +1,33 @@
 import { useRef, useState } from "react";
-import { ArrowLeft, Check, Copy, FolderOpen, Folder } from "lucide-react";
+import { ArrowLeft, Check, Copy, FolderOpen, Folder, SquareTerminal } from "lucide-react";
 import { useUI } from "../../store/ui";
 import { useSettings } from "../../store/settings";
 import { MAX_PER_WS, useWorkspaces } from "../../store/workspaces";
 import { newSession } from "../../actions";
-import { pickFolder, whichProgram } from "../../lib/ipc";
-import { SESSION_TYPES, type SessionType } from "../../lib/sessionTypes";
+import { clipboardWriteText, pickFolder, whichProgram } from "../../lib/ipc";
+import {
+  AI_TYPES,
+  SHELL_TYPES,
+  buildShell,
+  sessionLabel,
+  shellTypeOf,
+  type AiType,
+  type ShellType,
+} from "../../lib/sessionTypes";
 import { DialogTrap } from "../../lib/dialog-trap";
 import { SessionIcon } from "../icons";
 import { useStrings } from "../../lib/i18n";
+
+// Three-step wizard: terminal type -> AI (or none) -> folder. Each step is one click;
+// Back always goes exactly ONE step back. The user's default shell is focused on step 1
+// so Enter-Enter-Enter recreates the old two-click speed.
+type Step = "shell" | "ai" | "folder";
 
 export function NewSessionDialog() {
   const t = useStrings();
   const open = useUI((s) => s.newSessionOpen);
   const setNewSession = useUI((s) => s.setNewSession);
+  const defaultShellKind = useSettings((s) => s.defaultShell);
   const globalCwd = useSettings((s) => s.defaultCwd);
   const workspaceCwd = useWorkspaces(
     (s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId)?.defaultCwd,
@@ -25,7 +39,9 @@ export function NewSessionDialog() {
     return !!ws && ws.sessionIds.length >= MAX_PER_WS;
   });
 
-  const [selected, setSelected] = useState<SessionType | null>(null);
+  const [step, setStep] = useState<Step>("shell");
+  const [shellType, setShellType] = useState<ShellType | null>(null);
+  const [ai, setAi] = useState<AiType | null>(null);
   const [missing, setMissing] = useState<{ label: string; install: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -35,53 +51,84 @@ export function NewSessionDialog() {
   if (!open) return null;
 
   const close = () => {
-    setSelected(null);
+    setStep("shell");
+    setShellType(null);
+    setAi(null);
     setMissing(null);
     setBusy(false);
     setError(null);
     setNewSession(false);
   };
 
-  const chooseType = async (type: SessionType) => {
+  const goBack = () => {
+    setMissing(null);
+    setError(null);
+    if (step === "folder") setStep("ai");
+    else if (step === "ai") setStep("shell");
+  };
+
+  const chooseShell = async (s: ShellType) => {
     setMissing(null);
     setError(null);
     setBusy(true);
     try {
-      if (type.probe) {
-        const found = await whichProgram(type.probe);
-        if (!found) {
-          setMissing({
-            label: type.label,
-            install: type.install ?? `Program not found: ${type.probe}`,
-          });
-          setBusy(false);
-          return;
-        }
+      if (s.probe && !(await whichProgram(s.probe))) {
+        setMissing({ label: s.label, install: s.install ?? `Program not found: ${s.probe}` });
+        setBusy(false);
+        return;
       }
-      setSelected(type);
+      setShellType(s);
+      setStep("ai");
       setBusy(false);
     } catch (e) {
       console.warn("install probe failed", e);
-      setError(t.checkFailed(type.label));
+      setError(t.checkFailed(s.label));
       setBusy(false);
     }
   };
 
-  const start = async (folder: string | null) => {
-    if (!selected) return;
+  const chooseAi = async (a: AiType | null) => {
+    setMissing(null);
+    setError(null);
+    // WSL runs the CLI inside the distro, so a Windows PATH probe would be wrong;
+    // a missing CLI surfaces as command-not-found inside the pane instead.
+    if (!a || shellType?.id === "wsl") {
+      setAi(a);
+      setStep("folder");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (!(await whichProgram(a.cli))) {
+        setMissing({ label: a.label, install: a.install });
+        setBusy(false);
+        return;
+      }
+      setAi(a);
+      setStep("folder");
+      setBusy(false);
+    } catch (e) {
+      console.warn("install probe failed", e);
+      setError(t.checkFailed(a.label));
+      setBusy(false);
+    }
+  };
+
+  const start = (folder: string | null) => {
+    if (!shellType) return;
     if (activeFull) {
       setError(t.workspaceFullMsg(MAX_PER_WS));
       return;
     }
+    const label = sessionLabel(shellType, ai);
     const cwd = folder ?? undefined;
     const base = cwd ? cwd.split(/[\\/]/).filter(Boolean).pop() || cwd : null;
     const id = newSession({
-      shell: selected.shell,
-      // "Claude Chat · myproject" with a folder, plain "Claude Chat" without one.
-      name: base ? `${selected.label} · ${base}` : selected.label,
+      shell: buildShell(shellType, ai),
+      // "Claude Code · myproject" with a folder, plain "Claude Code" without one.
+      name: base ? `${label} · ${base}` : label,
       cwd,
-      typeId: selected.id,
-      agent: selected.agent,
+      typeId: ai ? ai.id : shellType.id,
     });
     if (!id) {
       setError(t.workspaceFullMsg(MAX_PER_WS));
@@ -93,9 +140,11 @@ export function NewSessionDialog() {
   const browse = async () => {
     setBusy(true);
     try {
-      const folder = await pickFolder(t.chooseFolderFor(selected?.label ?? ""));
+      const folder = await pickFolder(
+        t.chooseFolderFor(shellType ? sessionLabel(shellType, ai) : ""),
+      );
       setBusy(false);
-      if (folder) void start(folder);
+      if (folder) start(folder);
     } catch (e) {
       console.warn("folder picker failed", e);
       setBusy(false);
@@ -104,20 +153,24 @@ export function NewSessionDialog() {
   };
 
   const copy = (text: string) => {
-    void navigator.clipboard.writeText(text);
+    void clipboardWriteText(text).catch((err) => console.warn("clipboard copy failed", err));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const shells = SESSION_TYPES.filter((t) => t.group === "shell");
-  const ais = SESSION_TYPES.filter((t) => t.group === "ai");
-
-  const renderCard = (type: SessionType) => (
-    <button key={type.id} className="type-card" disabled={busy} onClick={() => chooseType(type)}>
-      <SessionIcon typeId={type.id} size={22} />
-      <span className="type-label">{type.label}</span>
-    </button>
-  );
+  const defaultShellId = shellTypeOf(defaultShellKind).id;
+  const title =
+    step === "shell"
+      ? t.newSession
+      : step === "ai"
+        ? t.pickAiTitle
+        : t.whereStart(shellType ? sessionLabel(shellType, ai) : "");
+  const hint =
+    step === "shell"
+      ? `${t.stepOf(1)} · ${t.pickShellHint}`
+      : step === "ai"
+        ? `${t.stepOf(2)} · ${t.pickAiHint(shellType?.label ?? "")}`
+        : `${t.stepOf(3)} · ${t.pickFolderHint}`;
 
   return (
     <div
@@ -129,70 +182,115 @@ export function NewSessionDialog() {
       <div className="picker" role="dialog" aria-modal="true" aria-label={t.newSession} ref={boxRef}>
         <DialogTrap containerRef={boxRef} />
         <div className="picker-head">
-          {selected ? (
+          {step !== "shell" ? (
             <button
               className="icon-btn"
               title={t.back}
-              aria-label={t.backToTypes}
-              onClick={() => setSelected(null)}
+              aria-label={step === "ai" ? t.backToShells : t.backToAi}
+              onClick={goBack}
             >
               <ArrowLeft size={16} />
             </button>
           ) : null}
-          {selected ? t.whereStart(selected.label) : t.newSession}
+          {title}
           <span style={{ flex: 1 }} />
-          <span className="picker-hint">
-            {selected ? t.pickFolderHint : t.pickTypeHint}
-          </span>
+          <span className="picker-hint">{hint}</span>
         </div>
 
         <div className="picker-body" aria-busy={busy}>
-          {!selected ? (
-            <>
-              <div className="picker-group-label">{t.shellsGroup}</div>
-              <div className="picker-grid">{shells.map(renderCard)}</div>
-              <div className="picker-group-label">{t.aiGroup}</div>
-              <div className="picker-grid">{ais.map(renderCard)}</div>
-              {missing && (
-                <div className="install-note">
-                  <div className="install-title">{t.notInstalled(missing.label)}</div>
-                  <div className="install-row">
-                    <code>{missing.install}</code>
-                    <button
-                      className="icon-btn"
-                      title={t.copy}
-                      aria-label={t.copyInstall}
-                      onClick={() => copy(missing.install)}
-                    >
-                      {copied ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {error && <div className="picker-error">{error}</div>}
-            </>
-          ) : (
+          {step === "shell" && (
+            <div className="picker-grid">
+              {SHELL_TYPES.map((s) => (
+                <button
+                  key={s.id}
+                  className="type-card"
+                  disabled={busy}
+                  autoFocus={s.id === defaultShellId}
+                  onClick={() => void chooseShell(s)}
+                >
+                  <SessionIcon typeId={s.id} size={22} />
+                  <span className="type-label">{s.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === "ai" && (
+            <div className="picker-grid">
+              <button
+                className="type-card"
+                disabled={busy}
+                autoFocus
+                onClick={() => void chooseAi(null)}
+              >
+                <span className="row-icon">
+                  <SquareTerminal size={16} />
+                </span>
+                <span className="type-label">{t.aiNoneLabel}</span>
+              </button>
+              {AI_TYPES.map((a) => (
+                <button
+                  key={a.id}
+                  className="type-card"
+                  disabled={busy}
+                  onClick={() => void chooseAi(a)}
+                >
+                  <SessionIcon typeId={a.id} size={22} />
+                  <span className="type-label">{a.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === "folder" && (
             <div className="folder-choice">
               {defaultCwd ? (
-                <button className="folder-btn" disabled={busy} onClick={() => void start(defaultCwd)}>
+                <button
+                  className="folder-btn"
+                  disabled={busy}
+                  autoFocus
+                  onClick={() => start(defaultCwd)}
+                >
                   <Folder size={16} />
                   <span className="folder-btn-main">{t.defaultFolderBtn}</span>
                   <span className="folder-btn-path bidi-auto">{defaultCwd}</span>
                 </button>
               ) : null}
-              <button className="folder-btn" disabled={busy} onClick={() => void browse()}>
+              <button
+                className="folder-btn"
+                disabled={busy}
+                autoFocus={!defaultCwd}
+                onClick={() => void browse()}
+              >
                 <FolderOpen size={16} />
                 <span className="folder-btn-main">{t.chooseFolderBtn}</span>
                 <span className="folder-btn-path">{t.opensFolderBrowser}</span>
               </button>
-              <button className="folder-btn" disabled={busy} onClick={() => void start(null)}>
+              <button className="folder-btn" disabled={busy} onClick={() => start(null)}>
                 <span className="folder-btn-main" style={{ marginInlineStart: 26 }}>
                   {t.noFolderBtn}
                 </span>
               </button>
-              {error && <div className="picker-error">{error}</div>}
             </div>
           )}
+
+          {missing && (
+            <div className="install-note">
+              <div className="install-title">{t.notInstalled(missing.label)}</div>
+              <div className="install-row">
+                <code>{missing.install}</code>
+                <button
+                  className="icon-btn"
+                  title={t.copy}
+                  aria-label={t.copyInstall}
+                  onClick={() => copy(missing.install)}
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            </div>
+          )}
+          {error && <div className="picker-error">{error}</div>}
         </div>
 
         <div className="picker-foot">

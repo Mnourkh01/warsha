@@ -15,8 +15,6 @@ export interface Session {
   shell: ShellKind;
   cwd?: string;
   typeId?: string;
-  /** Present = this is an AI chat session (rendered as a chat pane, no PTY). */
-  agent?: "claude" | "gemini";
 }
 
 export interface Workspace {
@@ -41,7 +39,7 @@ interface WsState extends WsPersist {
   setWorkspaceCwd: (id: string, cwd: string | undefined) => void;
   setActiveWorkspace: (id: string) => void;
   addSession: (
-    spec: { shell: ShellKind; name: string; cwd?: string; typeId?: string; agent?: "claude" | "gemini" },
+    spec: { shell: ShellKind; name: string; cwd?: string; typeId?: string },
     workspaceId?: string,
   ) => string | null;
   removeSession: (id: string) => void;
@@ -58,6 +56,33 @@ interface WsState extends WsPersist {
 
 function makeWs(name: string): Workspace {
   return { id: uid(), name, sessionIds: [] };
+}
+
+const SHELL_KINDS = ["powershell", "cmd", "wsl", "custom"] as const;
+
+/** Boundary validation for one persisted session (same discipline as settings.sanitize):
+ *  the blob is untrusted, and a malformed shell would flow straight into pty_spawn.
+ *  Unknown extra fields (e.g. the removed `agent` flag) are dropped by reconstruction. */
+function sanitizeSession(id: string, raw: unknown): Session | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as { name?: unknown; shell?: unknown; cwd?: unknown; typeId?: unknown };
+  const shell = s.shell as ShellKind | undefined;
+  const shellOk =
+    !!shell &&
+    typeof shell === "object" &&
+    SHELL_KINDS.includes(shell.kind) &&
+    (shell.kind !== "custom" ||
+      (typeof shell.program === "string" &&
+        (shell.args === undefined ||
+          (Array.isArray(shell.args) && shell.args.every((a) => typeof a === "string")))));
+  if (!shellOk) return null;
+  return {
+    id,
+    name: typeof s.name === "string" && s.name.trim() ? s.name : "Session",
+    shell,
+    cwd: typeof s.cwd === "string" && s.cwd.trim() ? s.cwd : undefined,
+    typeId: typeof s.typeId === "string" ? s.typeId : undefined,
+  };
 }
 
 export const useWorkspaces = create<WsState>((set, get) => {
@@ -133,7 +158,6 @@ export const useWorkspaces = create<WsState>((set, get) => {
         shell: spec.shell,
         cwd: spec.cwd,
         typeId: spec.typeId,
-        agent: spec.agent,
       };
       set((s) => ({
         sessions: { ...s.sessions, [id]: session },
@@ -240,17 +264,22 @@ export const useWorkspaces = create<WsState>((set, get) => {
         d.sessions &&
         typeof d.sessions === "object"
       ) {
-        const raw = d.sessions;
         // Same boundary discipline as settings.hydrate: the blob comes from disk, so
-        // ids/names get type-checked and a session id may live in ONE workspace only
-        // (a duplicated id would double-render and fight over the same PTY).
+        // every session is shape-checked (a bad one is dropped, not spawned) and a
+        // session id may live in ONE workspace only (a duplicated id would double-render
+        // and fight over the same PTY).
+        const clean: Record<string, Session> = {};
+        for (const [sid, sess] of Object.entries(d.sessions)) {
+          const ok = sanitizeSession(sid, sess);
+          if (ok) clean[sid] = ok;
+        }
         const seen = new Set<string>();
         const workspaces = d.workspaces
           .filter((w) => !!w && typeof w.id === "string" && w.id.length > 0)
           .map((w) => {
             const sessionIds: string[] = [];
             for (const id of Array.isArray(w.sessionIds) ? w.sessionIds : []) {
-              if (typeof id !== "string" || !raw[id] || seen.has(id)) continue;
+              if (typeof id !== "string" || !clean[id] || seen.has(id)) continue;
               seen.add(id);
               sessionIds.push(id);
               if (sessionIds.length >= MAX_PER_WS) break;
@@ -272,7 +301,7 @@ export const useWorkspaces = create<WsState>((set, get) => {
         // leak entries that re-persist forever.
         const keep = new Set(workspaces.flatMap((w) => w.sessionIds));
         const sessions: Record<string, Session> = {};
-        for (const [sid, sess] of Object.entries(raw)) {
+        for (const [sid, sess] of Object.entries(clean)) {
           if (keep.has(sid)) sessions[sid] = sess;
         }
         // Restore the workspace the user was in, not always the first one.

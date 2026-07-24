@@ -40,7 +40,7 @@ function setOver(id: string | null): void {
 // gets double quotes so the path stays one inert argument in cmd/PowerShell/bash alike.
 // (No inner-quote escaping - Windows file paths cannot contain a double quote.)
 const SHELL_SAFE_PATH = /^[\w.:\\/-]+$/;
-function quotePath(p: string): string {
+export function quotePath(p: string): string {
   return SHELL_SAFE_PATH.test(p) ? p : `"${p}"`;
 }
 
@@ -68,7 +68,8 @@ function handle(e: FileDropEvent): void {
 export function registerTerminalDrop(sessionId: string, target: TermDropTarget): () => void {
   targets.set(sessionId, target);
   // Start the single global listener lazily, on the first terminal that mounts.
-  if (!unlisten) unlisten = onWebviewFileDrop(handle);
+  // Outside Tauri (plain browser, tests) the subscription rejects: no OS drops there.
+  if (!unlisten) unlisten = onWebviewFileDrop(handle).catch(() => () => {});
   return () => {
     if (overId === sessionId) overId = null;
     targets.delete(sessionId);

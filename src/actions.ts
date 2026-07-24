@@ -3,11 +3,10 @@
 import { useWorkspaces } from "./store/workspaces";
 import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useRuntime } from "./store/runtime";
-import { useChat } from "./store/chat";
 import { useUI } from "./store/ui";
 import { applySettingsToAll, disposeTerminal, getTerminal } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
-import { agentCancel, ptyWrite } from "./lib/ipc";
+import { ptyWrite } from "./lib/ipc";
 import { SHELL_LABELS, type ShellKind } from "./lib/types";
 
 export function shellDefaultName(shell: ShellKind): string {
@@ -34,7 +33,6 @@ export function newSession(spec: {
   cwd?: string;
   typeId?: string;
   workspaceId?: string;
-  agent?: "claude" | "gemini";
 }): string | null {
   const settings = useSettings.getState();
   const ws = useWorkspaces.getState();
@@ -49,13 +47,11 @@ export function newSession(spec: {
       name: spec.name ?? shellDefaultName(shell),
       cwd: spec.cwd ?? wsCwd ?? settings.defaultCwd,
       typeId: spec.typeId,
-      agent: spec.agent,
     },
     spec.workspaceId,
   );
   if (!id) return null; // workspace is full
-  // Chat panes have no PTY; they idle until a message is in flight.
-  useRuntime.getState().setStatus(id, spec.agent ? "idle" : "running");
+  useRuntime.getState().setStatus(id, "running");
   return id;
 }
 
@@ -66,32 +62,18 @@ export function openSession(id: string): void {
   queueMicrotask(() => getTerminal(id)?.focus());
 }
 
-/** Stop a session: remove it from its workspace and kill the PTY (or chat request). */
+/** Stop a session: remove it from its workspace and kill the PTY. */
 export function closeSession(id: string): void {
   const ui = useUI.getState();
-  const isChat = Boolean(useWorkspaces.getState().sessions[id]?.agent);
   if (ui.maximizedSessionId === id) ui.setMaximized(null);
   useWorkspaces.getState().removeSession(id);
-  if (isChat) {
-    void agentCancel(id).catch(() => {});
-    useChat.getState().clear(id);
-  } else {
-    void disposeTerminal(id);
-  }
+  void disposeTerminal(id);
   useRuntime.getState().clearStatus(id);
 }
 
 /** Restart a session in place (dispose + remount its TerminalView via an epoch bump).
- *  Awaits the kill so the respawn under the SAME id cannot race the old PTY teardown.
- *  For a chat session, restart means: stop the in-flight request, clear the transcript. */
+ *  Awaits the kill so the respawn under the SAME id cannot race the old PTY teardown. */
 export async function restartSession(id: string): Promise<void> {
-  if (useWorkspaces.getState().sessions[id]?.agent) {
-    await agentCancel(id).catch(() => {});
-    useChat.getState().clear(id);
-    useRuntime.getState().setStatus(id, "idle");
-    useRuntime.getState().clearAttention(id);
-    return;
-  }
   await disposeTerminal(id);
   useRuntime.getState().setStatus(id, "running");
   useRuntime.getState().clearAttention(id);
@@ -125,19 +107,17 @@ function cdCommand(shell: ShellKind, path: string): string {
 }
 
 /**
- * Point a session at a new folder WITHOUT restarting it. For a terminal session this
- * types a `cd` into the running shell (scrollback and any running program survive); the
- * stored cwd is updated too, so a later restart also lands in the new folder. For a chat
- * session there is no PTY, so only the stored cwd changes and the next message runs there.
- * A `cd` typed while a foreground program (e.g. an interactive CLI) is running goes to that
- * program, not the shell - the user quits it first, same as typing `cd` by hand.
+ * Point a session at a new folder WITHOUT restarting it: types a `cd` into the running
+ * shell (scrollback and any running program survive); the stored cwd is updated too, so a
+ * later restart also lands in the new folder. A `cd` typed while a foreground program
+ * (e.g. an interactive CLI) is running goes to that program, not the shell - the user
+ * quits it first, same as typing `cd` by hand.
  */
 export function changeSessionFolder(id: string, cwd: string): void {
   const ws = useWorkspaces.getState();
   const session = ws.sessions[id];
   if (!session) return;
   ws.setSessionCwd(id, cwd);
-  if (session.agent) return; // chat pane: next request uses the new cwd
   if (getTerminal(id)) void ptyWrite(id, cdCommand(session.shell, cwd)).catch(() => {});
 }
 
@@ -150,23 +130,12 @@ export function switchWorkspace(id: string): void {
 }
 
 export function deleteWorkspace(id: string): void {
-  const state = useWorkspaces.getState();
-  const chatIds = new Set(
-    state.workspaces
-      .find((w) => w.id === id)
-      ?.sessionIds.filter((sid) => state.sessions[sid]?.agent) ?? [],
-  );
-  const removed = state.removeWorkspace(id);
+  const removed = useWorkspaces.getState().removeWorkspace(id);
   const runtime = useRuntime.getState();
   const ui = useUI.getState();
   for (const sid of removed) {
     if (ui.maximizedSessionId === sid) ui.setMaximized(null);
-    if (chatIds.has(sid)) {
-      void agentCancel(sid).catch(() => {});
-      useChat.getState().clear(sid);
-    } else {
-      void disposeTerminal(sid);
-    }
+    void disposeTerminal(sid);
     runtime.clearStatus(sid);
   }
 }
