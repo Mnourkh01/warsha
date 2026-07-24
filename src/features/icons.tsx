@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bot, SquareTerminal } from "lucide-react";
+import { Bot, Server, SquareTerminal } from "lucide-react";
 import { siClaude, siGooglegemini } from "simple-icons";
 
 // One icon source of truth. AI agents use their real brand logos (simple-icons, vector =
@@ -62,6 +62,12 @@ export function SessionIcon({ typeId, size = 20 }: { typeId?: string; size?: num
       return (
         <Badge bg="#141317" size={size}>
           <Bot size={g} color="#fff" />
+        </Badge>
+      );
+    case "ssh":
+      return (
+        <Badge bg="#3a6ea5" size={size}>
+          <Server size={g} color="#fff" />
         </Badge>
       );
     default:

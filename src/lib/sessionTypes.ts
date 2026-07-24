@@ -6,12 +6,15 @@ import type { ShellKind } from "./types";
 // yourself in that shell.
 
 export interface ShellType {
-  id: "powershell" | "cmd" | "wsl" | "bash";
+  id: "powershell" | "cmd" | "wsl" | "bash" | "ssh";
   label: string;
   shell: ShellKind;
   /** Program to check on PATH before offering the shell (absent = always available). */
   probe?: string;
   install?: string;
+  /** Remote session: the wizard asks for a target instead of AI + folder, and the
+   *  settings default-shell dropdown skips it (a default needs no per-use input). */
+  remote?: true;
 }
 
 export interface AiType {
@@ -32,6 +35,15 @@ export const SHELL_TYPES: ShellType[] = [
     shell: { kind: "custom", program: "bash.exe", args: ["-i", "-l"] },
     probe: "bash.exe",
     install: "Install Git for Windows (git-scm.com) or enable WSL to get bash.",
+  },
+  {
+    id: "ssh",
+    label: "SSH",
+    // Placeholder shell; the real one comes from buildSshShell(target) in the wizard.
+    shell: { kind: "custom", program: "ssh.exe" },
+    probe: "ssh.exe",
+    install: "Enable the OpenSSH Client optional feature (Settings > System > Optional features).",
+    remote: true,
   },
 ];
 
@@ -56,10 +68,32 @@ export const AI_TYPES: AiType[] = [
   },
 ];
 
+/** Conservative `user@host[:port]` parser for the SSH wizard step. One plain token:
+ *  no spaces, no leading dash (it would parse as an ssh OPTION), no shell metachars -
+ *  the target goes into a spawn args array, so this is defense in depth, not escaping. */
+export function parseSshTarget(input: string): { target: string; port?: number } | null {
+  const m = /^([\w.-]+@)?([\w][\w.-]*)(?::(\d{1,5}))?$/.exec(input.trim());
+  if (!m) return null;
+  const port = m[3] ? Number(m[3]) : undefined;
+  if (port !== undefined && (port < 1 || port > 65535)) return null;
+  return { target: `${m[1] ?? ""}${m[2]}`, port };
+}
+
+/** The ShellKind that connects to an SSH target, or null for an invalid target.
+ *  Uses the Windows OpenSSH client, so the user's ~/.ssh config and keys apply. */
+export function buildSshShell(input: string): ShellKind | null {
+  const parsed = parseSshTarget(input);
+  if (!parsed) return null;
+  const args = parsed.port ? ["-p", String(parsed.port), parsed.target] : [parsed.target];
+  return { kind: "custom", program: "ssh.exe", args };
+}
+
 /** The ShellKind that launches `ai` inside `shellType` (plain shell when ai is null). */
 export function buildShell(shellType: ShellType, ai: AiType | null): ShellKind {
-  if (!ai) return shellType.shell;
+  if (!ai || shellType.remote) return shellType.shell;
   switch (shellType.id) {
+    case "ssh": // unreachable (remote), kept for switch exhaustiveness
+      return shellType.shell;
     case "powershell":
       // Runs the CLI at startup in the pane's cwd, keeps the shell alive when it exits.
       return {

@@ -14,8 +14,11 @@ import type { ShellKind, ThemeMode } from "../../lib/types";
 const THEMES: ThemeMode[] = ["dark", "light", "system"];
 const TERM_THEMES: TerminalTheme[] = ["dark", "light", "match"];
 // One source of truth with the new-session wizard: the dropdown offers exactly the
-// wizard's shell catalog (bash carries its full custom ShellKind, not just a kind string).
-const SHELLS: { value: string; label: string; shell: ShellKind }[] = SHELL_TYPES.map((s) => ({
+// wizard's shell catalog (bash carries its full custom ShellKind, not just a kind
+// string). Remote types are skipped - a default shell needs no per-use target input.
+const SHELLS: { value: string; label: string; shell: ShellKind }[] = SHELL_TYPES.filter(
+  (s) => !s.remote,
+).map((s) => ({
   value: s.id,
   label: s.label,
   shell: s.shell,

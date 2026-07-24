@@ -49,6 +49,14 @@ const en = {
   cmdOpenTemplate: (name: string) => `Open template: ${name}`,
   hintTemplate: "template",
 
+  // ssh step
+  sshTitle: "Connect over SSH",
+  sshHint: "uses your OpenSSH config and keys",
+  sshPlaceholder: "user@host or user@host:2222",
+  sshTargetLabel: "SSH target",
+  sshConnect: "Connect",
+  sshInvalid: "Enter a host like user@server.com (an optional :port is fine).",
+
   // session rows and panes
   sessionName: "Session name",
   restart: "Restart",

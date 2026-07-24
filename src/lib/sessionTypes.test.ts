@@ -3,6 +3,7 @@ import {
   AI_TYPES,
   SHELL_TYPES,
   buildShell,
+  buildSshShell,
   sessionLabel,
   shellTypeOf,
 } from "./sessionTypes";
@@ -57,6 +58,35 @@ describe("shellTypeOf", () => {
 
   it("falls back to PowerShell for unknown custom shells", () => {
     expect(shellTypeOf({ kind: "custom", program: "nu.exe" }).id).toBe("powershell");
+  });
+});
+
+describe("parseSshTarget / buildSshShell", () => {
+  it("accepts host, user@host, and user@host:port", () => {
+    expect(buildSshShell("server.com")).toEqual({
+      kind: "custom",
+      program: "ssh.exe",
+      args: ["server.com"],
+    });
+    expect(buildSshShell(" deploy@10.0.0.5 ")).toEqual({
+      kind: "custom",
+      program: "ssh.exe",
+      args: ["deploy@10.0.0.5"],
+    });
+    expect(buildSshShell("deploy@server.com:2222")).toEqual({
+      kind: "custom",
+      program: "ssh.exe",
+      args: ["-p", "2222", "deploy@server.com"],
+    });
+  });
+
+  it("rejects option injection, spaces, junk, and bad ports", () => {
+    expect(buildSshShell("-oProxyCommand=calc host")).toBeNull();
+    expect(buildSshShell("user@host extra")).toBeNull();
+    expect(buildSshShell("user@host:99999")).toBeNull();
+    expect(buildSshShell("user@host:0")).toBeNull();
+    expect(buildSshShell("")).toBeNull();
+    expect(buildSshShell("host;rm -rf /")).toBeNull();
   });
 });
 

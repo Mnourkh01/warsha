@@ -9,6 +9,8 @@ import {
   AI_TYPES,
   SHELL_TYPES,
   buildShell,
+  buildSshShell,
+  parseSshTarget,
   sessionLabel,
   shellTypeOf,
   type AiType,
@@ -20,8 +22,9 @@ import { useStrings } from "../../lib/i18n";
 
 // Three-step wizard: terminal type -> AI (or none) -> folder. Each step is one click;
 // Back always goes exactly ONE step back. The user's default shell is focused on step 1
-// so Enter-Enter-Enter recreates the old two-click speed.
-type Step = "shell" | "ai" | "folder";
+// so Enter-Enter-Enter recreates the old two-click speed. Remote types (SSH) branch to
+// a target-input step instead of AI + folder.
+type Step = "shell" | "ai" | "folder" | "ssh";
 
 export function NewSessionDialog() {
   const t = useStrings();
@@ -42,6 +45,7 @@ export function NewSessionDialog() {
   const [step, setStep] = useState<Step>("shell");
   const [shellType, setShellType] = useState<ShellType | null>(null);
   const [ai, setAi] = useState<AiType | null>(null);
+  const [sshTarget, setSshTarget] = useState("");
   const [missing, setMissing] = useState<{ label: string; install: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -54,6 +58,7 @@ export function NewSessionDialog() {
     setStep("shell");
     setShellType(null);
     setAi(null);
+    setSshTarget("");
     setMissing(null);
     setBusy(false);
     setError(null);
@@ -64,7 +69,7 @@ export function NewSessionDialog() {
     setMissing(null);
     setError(null);
     if (step === "folder") setStep("ai");
-    else if (step === "ai") setStep("shell");
+    else if (step === "ai" || step === "ssh") setStep("shell");
   };
 
   const chooseShell = async (s: ShellType) => {
@@ -78,13 +83,32 @@ export function NewSessionDialog() {
         return;
       }
       setShellType(s);
-      setStep("ai");
+      setStep(s.remote ? "ssh" : "ai");
       setBusy(false);
     } catch (e) {
       console.warn("install probe failed", e);
       setError(t.checkFailed(s.label));
       setBusy(false);
     }
+  };
+
+  const connectSsh = () => {
+    const parsed = parseSshTarget(sshTarget);
+    const shell = buildSshShell(sshTarget);
+    if (!parsed || !shell) {
+      setError(t.sshInvalid);
+      return;
+    }
+    if (activeFull) {
+      setError(t.workspaceFullMsg(MAX_PER_WS));
+      return;
+    }
+    const id = newSession({ shell, name: parsed.target, typeId: "ssh" });
+    if (!id) {
+      setError(t.workspaceFullMsg(MAX_PER_WS));
+      return;
+    }
+    close();
   };
 
   const chooseAi = async (a: AiType | null) => {
@@ -164,13 +188,17 @@ export function NewSessionDialog() {
       ? t.newSession
       : step === "ai"
         ? t.pickAiTitle
-        : t.whereStart(shellType ? sessionLabel(shellType, ai) : "");
+        : step === "ssh"
+          ? t.sshTitle
+          : t.whereStart(shellType ? sessionLabel(shellType, ai) : "");
   const hint =
     step === "shell"
       ? `${t.stepOf(1)} · ${t.pickShellHint}`
       : step === "ai"
         ? `${t.stepOf(2)} · ${t.pickAiHint(shellType?.label ?? "")}`
-        : `${t.stepOf(3)} · ${t.pickFolderHint}`;
+        : step === "ssh"
+          ? t.sshHint
+          : `${t.stepOf(3)} · ${t.pickFolderHint}`;
 
   return (
     <div
@@ -240,6 +268,31 @@ export function NewSessionDialog() {
                 </button>
               ))}
             </div>
+          )}
+
+          {step === "ssh" && (
+            <form
+              className="ssh-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                connectSsh();
+              }}
+            >
+              <input
+                className="text-input"
+                autoFocus
+                placeholder={t.sshPlaceholder}
+                aria-label={t.sshTargetLabel}
+                value={sshTarget}
+                onChange={(e) => {
+                  setSshTarget(e.target.value);
+                  setError(null);
+                }}
+              />
+              <button className="btn-solid" type="submit" disabled={busy}>
+                {t.sshConnect}
+              </button>
+            </form>
           )}
 
           {step === "folder" && (
