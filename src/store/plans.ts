@@ -31,6 +31,14 @@ export type PlanStatus = (typeof PLAN_STATUSES)[number];
 export const PLAN_EFFORTS = ["s", "m", "l"] as const;
 export type PlanEffort = (typeof PLAN_EFFORTS)[number];
 
+/** MoSCoW-lite; absent = unranked. */
+export const PLAN_PRIORITIES = ["must", "should", "could"] as const;
+export type PlanPriority = (typeof PLAN_PRIORITIES)[number];
+
+const MAX_OWNER = 80;
+const MAX_DUE = 40;
+const MAX_LINK = 300;
+
 /** Kinds whose list field is meaningful (acceptance criteria / options / checks). */
 export const LIST_KINDS = ["task", "decision", "test"] as const;
 /** Kinds that carry a path-like field (URL path / screen route). */
@@ -72,6 +80,14 @@ export interface PlanNode {
   status?: PlanStatus;
   /** Rough size: s / m / l. */
   effort?: PlanEffort;
+  /** MoSCoW-lite ranking; absent = unranked. */
+  priority?: PlanPriority;
+  /** Who does it: the user, Claude, a friend - free text. */
+  owner?: string;
+  /** Free-text target date ("Friday", "2026-08-01"). */
+  due?: string;
+  /** Reference URL (doc, design, repo); http(s) only. */
+  link?: string;
   /** api only */
   method?: HttpMethod;
   /** api (URL path) and screen (route) */
@@ -138,6 +154,13 @@ export function sanitizePlanNode(raw: unknown): PlanNode | null {
   node.effort = (PLAN_EFFORTS as readonly string[]).includes(r.effort as string)
     ? (r.effort as PlanEffort)
     : undefined;
+  node.priority = (PLAN_PRIORITIES as readonly string[]).includes(r.priority as string)
+    ? (r.priority as PlanPriority)
+    : undefined;
+  node.owner = cleanStr(r.owner, MAX_OWNER);
+  node.due = cleanStr(r.due, MAX_DUE);
+  const link = cleanStr(r.link, MAX_LINK);
+  node.link = link && /^https?:\/\//i.test(link) ? link : undefined;
   if (kind === "api") {
     node.method = (HTTP_METHODS as readonly string[]).includes(r.method as string)
       ? (r.method as HttpMethod)

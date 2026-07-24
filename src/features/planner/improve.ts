@@ -44,7 +44,7 @@ export function buildImprovePrompt(doc: PlanDoc, improvements: string[]): string
     "Rules:",
     "- Keep the exact id of every block you keep; give NEW blocks new short unique ids.",
     "- Allowed kinds: phase | task | decision | note | screen | api | service | data | integration | test | deploy.",
-    "- api blocks may set method (GET|POST|PUT|PATCH|DELETE); api and screen blocks may set path; task, decision, and test blocks may set acceptance (string[]: acceptance criteria, options, or checks); data blocks may set fields ([{name, type, note?}]); any block may set status (doing|done) and effort (s|m|l).",
+    "- api blocks may set method (GET|POST|PUT|PATCH|DELETE); api and screen blocks may set path; task, decision, and test blocks may set acceptance (string[]: acceptance criteria, options, or checks); data blocks may set fields ([{name, type, note?}]); any block may set status (doing|done), effort (s|m|l), priority (must|should|could), owner (string), due (string), and link (https url).",
     "- Non-phase blocks may set phaseId referencing a phase block's id.",
     "- Edges point from prerequisite to dependent; never create a cycle.",
     "- Do NOT include positions, tints, or any other field.",

@@ -141,6 +141,23 @@ describe("planToMarkdown", () => {
       }),
     );
     expect(md).toContain("- [x] Ship it [L]");
+    const withMeta = planToMarkdown(
+      doc({
+        nodes: [
+          node("m1", {
+            label: "Core job",
+            priority: "must",
+            owner: "Claude",
+            due: "Friday",
+            link: "https://example.com/doc",
+          }),
+        ],
+      }),
+    );
+    expect(withMeta).toContain("- [ ] Core job (must)");
+    expect(withMeta).toContain("  - Owner: Claude");
+    expect(withMeta).toContain("  - Due: Friday");
+    expect(withMeta).toContain("  - Link: https://example.com/doc");
     expect(md).toContain("- [ ] Busy (in progress)");
     expect(md).toContain("### Decisions");
     expect(md).toContain("  - Option: SQLite");

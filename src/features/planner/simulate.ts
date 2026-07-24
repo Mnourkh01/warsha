@@ -44,6 +44,9 @@ function nodeLine(n: PlanNode, phaseLabelById: Map<string, string>): string {
   else if (n.path) bits.push(`route: ${n.path}`);
   if (n.status) bits.push(n.status === "done" ? "already done" : "in progress");
   if (n.effort) bits.push(`effort: ${n.effort.toUpperCase()}`);
+  if (n.priority) bits.push(`priority: ${n.priority}`);
+  if (n.owner) bits.push(`owner: ${n.owner}`);
+  if (n.due) bits.push(`due: ${n.due}`);
   if (n.acceptance?.length) bits.push(`items: ${n.acceptance.join("; ").slice(0, 160)}`);
   if (n.fields?.length) bits.push(`fields: ${n.fields.map((f) => f.name).join(", ").slice(0, 120)}`);
   if (n.description) bits.push(n.description.replace(/\s+/g, " ").slice(0, 120));

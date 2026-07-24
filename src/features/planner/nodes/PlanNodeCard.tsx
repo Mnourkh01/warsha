@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, Link2 } from "lucide-react";
 import { tintClasses } from "../../../lib/tints";
 import { useStrings } from "../../../lib/i18n";
 import { KIND_META } from "../nodeKinds";
@@ -22,6 +22,12 @@ export function PlanNodeCard({ data, selected }: NodeProps<PlanFlowNode>) {
         <Icon size={12} />
         <span>{t.planKind[n.kind]}</span>
         <span className="plan-node-flags">
+          {n.priority === "must" && (
+            <b className="plan-node-must" title={t.priorityMust}>
+              !
+            </b>
+          )}
+          {n.link && /^https?:\/\//i.test(n.link) && <Link2 size={11} aria-label={t.inspLink} />}
           {n.effort && <b className="plan-node-eff">{n.effort.toUpperCase()}</b>}
           {n.status === "doing" && (
             <span className="plan-node-doing" role="img" aria-label={t.statusDoing} />

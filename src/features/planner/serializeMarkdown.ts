@@ -104,11 +104,11 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
       return;
     }
     if (m.kind === "phase") return; // phases are sections, never list items
-    // Every work item is a checkbox; effort and in-progress ride as compact tags.
+    // Every work item is a checkbox; effort, priority and in-progress ride as tags.
     const box = m.status === "done" ? "[x]" : "[ ]";
     const tags = `${m.effort ? ` [${m.effort.toUpperCase()}]` : ""}${
-      m.status === "doing" ? " (in progress)" : ""
-    }`;
+      m.priority ? ` (${m.priority})` : ""
+    }${m.status === "doing" ? " (in progress)" : ""}`;
     let head: string;
     switch (m.kind) {
       case "api":
@@ -132,6 +132,9 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     for (const f of m.fields ?? []) {
       push(`  - \`${code(f.name)}\`: ${inline(f.type)}${f.note ? ` - ${inline(f.note)}` : ""}`);
     }
+    if (m.owner) push(`  - Owner: ${inline(m.owner)}`);
+    if (m.due) push(`  - Due: ${inline(m.due)}`);
+    if (m.link && /^https?:\/\//i.test(m.link)) push(`  - Link: ${inline(m.link)}`);
     if (dep) push(`  - ${dep}`);
   };
 

@@ -5,6 +5,7 @@ import { useStrings } from "../../lib/i18n";
 import {
   HTTP_METHODS,
   LIST_KINDS,
+  PLAN_PRIORITIES,
   MAX_ACCEPTANCE,
   MAX_ACCEPTANCE_LEN,
   MAX_DESC,
@@ -172,6 +173,56 @@ export function Inspector({
           </div>
         </div>
       )}
+      {node.kind !== "phase" && node.kind !== "note" && (
+        <div className="field">
+          <span className="field-label">{t.inspPriority}</span>
+          <div className="seg">
+            {PLAN_PRIORITIES.map((p) => (
+              <button
+                key={p}
+                className={node.priority === p ? "on" : ""}
+                onClick={() => onPatch({ priority: node.priority === p ? undefined : p })}
+              >
+                {p === "must" ? t.priorityMust : p === "should" ? t.priorityShould : t.priorityCould}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {node.kind !== "note" && (
+        <div className="plan-two">
+          <label className="field">
+            <span className="field-label">{t.inspOwner}</span>
+            <input
+              className="input bidi-auto"
+              dir="auto"
+              maxLength={80}
+              value={node.owner ?? ""}
+              onChange={(e) => onPatch({ owner: e.target.value || undefined })}
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">{t.inspDue}</span>
+            <input
+              className="input bidi-auto"
+              dir="auto"
+              maxLength={40}
+              value={node.due ?? ""}
+              onChange={(e) => onPatch({ due: e.target.value || undefined })}
+            />
+          </label>
+        </div>
+      )}
+      <label className="field">
+        <span className="field-label">{t.inspLink}</span>
+        <input
+          className="input mono"
+          placeholder="https://..."
+          maxLength={300}
+          value={node.link ?? ""}
+          onChange={(e) => onPatch({ link: e.target.value || undefined })}
+        />
+      </label>
       {node.kind !== "phase" && (
         <label className="field">
           <span className="field-label">{t.inspPhase}</span>
