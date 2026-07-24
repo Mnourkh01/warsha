@@ -62,6 +62,23 @@ describe("sanitizePlanDoc", () => {
     expect(out?.viewport.zoom).toBeLessThanOrEqual(4);
   });
 
+  it("validates edge kinds and never stores the default", () => {
+    const out = sanitizePlanDoc(
+      doc({
+        nodes: [node("a"), node("b"), node("c")],
+        edges: [
+          { id: "e1", source: "a", target: "b", kind: "delegates" },
+          { id: "e2", source: "b", target: "c", kind: "depends" },
+          { id: "e3", source: "a", target: "c", kind: "teleports" as never },
+        ],
+      }),
+    );
+    const byId = new Map(out?.edges.map((e) => [e.id, e]));
+    expect(byId.get("e1")?.kind).toBe("delegates");
+    expect(byId.get("e2")?.kind).toBeUndefined(); // depends = default = not stored
+    expect(byId.get("e3")?.kind).toBeUndefined(); // unknown kind dropped
+  });
+
   it("drops edges that are self, duplicated, or point at missing nodes", () => {
     const out = sanitizePlanDoc(
       doc({

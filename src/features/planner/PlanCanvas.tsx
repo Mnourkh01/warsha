@@ -29,10 +29,12 @@ import {
   MAX_PLAN_NODES,
   PLAN_NODE_KINDS,
   usePlans,
+  type EdgeKind,
   type PlanEdge,
   type PlanNode,
   type PlanNodeKind,
 } from "../../store/plans";
+import { EdgeInspector } from "./EdgeInspector";
 import { compareNodes, criticalPathIds, topoSortNodes, wouldCreateCycle } from "./graph";
 import { KIND_META, PLAN_NODE_MIME } from "./nodeKinds";
 import { Inspector } from "./Inspector";
@@ -63,14 +65,32 @@ const edgeOptions = {
   },
 };
 
+/** Short on-canvas text per arrow kind; plain dependency stays unlabeled. */
+const EDGE_TEXT: Record<EdgeKind, string> = {
+  depends: "",
+  delegates: "delegates",
+  handoff: "hands off",
+  tool: "tool",
+  calls: "calls",
+  covers: "covers",
+  gates: "gates",
+};
+
 function toFlowEdge(e: PlanEdge): Edge {
-  // The (v2) edge label rides in data so a round-trip never loses it.
-  return { id: e.id, source: e.source, target: e.target, data: { label: e.label }, ...edgeOptions };
+  // Kind and label ride in data so a round-trip never loses them.
+  return {
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    data: { label: e.label, kind: e.kind },
+    label: EDGE_TEXT[e.kind ?? "depends"] || undefined,
+    ...edgeOptions,
+  };
 }
 
 function toPlanEdge(e: Edge): PlanEdge {
-  const label = (e.data as { label?: string } | undefined)?.label;
-  return { id: e.id, source: e.source, target: e.target, label };
+  const data = e.data as { label?: string; kind?: EdgeKind } | undefined;
+  return { id: e.id, source: e.source, target: e.target, kind: data?.kind, label: data?.label };
 }
 
 /** The canvas owns the working copy (xyflow state); every real change is committed to
@@ -234,8 +254,37 @@ function CanvasInner({
     [setNodes, setEdges],
   );
 
+  const patchEdgeKind = useCallback(
+    (id: string, kind: EdgeKind) => {
+      setEdges((es) =>
+        es.map((e) =>
+          e.id === id
+            ? {
+                ...e,
+                data: { ...(e.data as object), kind: kind === "depends" ? undefined : kind },
+                label: EDGE_TEXT[kind] || undefined,
+              }
+            : e,
+        ),
+      );
+    },
+    [setEdges],
+  );
+
+  const deleteEdge = useCallback(
+    (id: string) => setEdges((es) => es.filter((e) => e.id !== id)),
+    [setEdges],
+  );
+
   const selectedNodes = nodes.filter((n) => n.selected);
   const selected = selectedNodes.length === 1 ? selectedNodes[0] : undefined;
+  const selectedEdges = edges.filter((e) => e.selected);
+  const selectedEdge =
+    selectedNodes.length === 0 && selectedEdges.length === 1 ? selectedEdges[0] : undefined;
+  const labelOf = useCallback(
+    (id: string) => nodes.find((n) => n.id === id)?.data.plan.label ?? id,
+    [nodes],
+  );
   const phases = nodes
     .filter((n) => n.data.plan.kind === "phase")
     .map((n) => n.data.plan)
@@ -291,6 +340,16 @@ function CanvasInner({
   // reaches each step, and glide the viewport along.
   const activeStepId = previewOpen ? (preview.steps[stepIndex]?.id ?? null) : null;
   const simSteps = previewOpen && simPhase === "ready" ? simData?.steps : undefined;
+  // Agents that receive a delegation arrow ARE the sub-agents (industry model:
+  // one agent kind, hierarchy lives in the edges).
+  const delegationTargets = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of edges) {
+      if ((e.data as { kind?: EdgeKind } | undefined)?.kind === "delegates") set.add(e.target);
+    }
+    return set;
+  }, [edges]);
+
   useEffect(() => {
     const position = new Map(preview.steps.map((s, i) => [s.id, i]));
     setNodes((ns) => {
@@ -300,6 +359,7 @@ function CanvasInner({
       const next = ns.map((n) => {
         const parts: string[] = [];
         if (n.id === activeStepId) parts.push("step-active");
+        if (n.data.plan.kind === "agent" && delegationTargets.has(n.id)) parts.push("is-subagent");
         if (simSteps) {
           const p = position.get(n.id);
           const st = simSteps[n.id];
@@ -312,7 +372,7 @@ function CanvasInner({
       });
       return changed ? next : ns;
     });
-  }, [activeStepId, stepIndex, simSteps, preview.steps, setNodes]);
+  }, [activeStepId, stepIndex, simSteps, preview.steps, delegationTargets, setNodes]);
 
   useEffect(() => {
     if (!activeStepId) return;
@@ -378,14 +438,23 @@ function CanvasInner({
           onRerunSim={onRerunSim}
           onClose={onClosePreview}
         />
+      ) : selected ? (
+        <Inspector
+          key={selected.id}
+          node={selected.data.plan}
+          phases={phases}
+          onPatch={(patch) => patchNode(selected.id, patch)}
+          onDelete={() => deleteNode(selected.id)}
+        />
       ) : (
-        selected && (
-          <Inspector
-            key={selected.id}
-            node={selected.data.plan}
-            phases={phases}
-            onPatch={(patch) => patchNode(selected.id, patch)}
-            onDelete={() => deleteNode(selected.id)}
+        selectedEdge && (
+          <EdgeInspector
+            key={selectedEdge.id}
+            kind={(selectedEdge.data as { kind?: EdgeKind } | undefined)?.kind ?? "depends"}
+            sourceLabel={labelOf(selectedEdge.source)}
+            targetLabel={labelOf(selectedEdge.target)}
+            onKind={(kind) => patchEdgeKind(selectedEdge.id, kind)}
+            onDelete={() => deleteEdge(selectedEdge.id)}
           />
         )
       )}

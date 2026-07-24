@@ -187,6 +187,30 @@ describe("planToMarkdown", () => {
     expect(ai).toContain("  - Model: claude-haiku-4-5");
   });
 
+  it("labels incoming arrows by their kind", () => {
+    const md = planToMarkdown(
+      doc({
+        nodes: [
+          node("boss", { kind: "agent", label: "Orchestrator" }),
+          node("sub", { kind: "agent", label: "Researcher" }),
+          node("t1", { kind: "test", label: "Smoke" }),
+          node("g1", { kind: "gate", label: "Human review" }),
+          node("job", { label: "Build feature" }),
+        ],
+        edges: [
+          { id: "e1", source: "boss", target: "sub", kind: "delegates" },
+          { id: "e2", source: "t1", target: "job", kind: "covers" },
+          { id: "e3", source: "g1", target: "job", kind: "gates" },
+        ],
+      }),
+    );
+    expect(md).toContain("  - Delegated by: Orchestrator");
+    expect(md).toContain("  - Covered by: Smoke");
+    expect(md).toContain("  - Gated by: Human review");
+    expect(md).toContain("### Gates");
+    expect(md).toContain("- [ ] **Human review**");
+  });
+
   it("never emits trailing spaces or triple blank lines", () => {
     const md = planToMarkdown(FULL);
     expect(md).not.toMatch(/[ \t]\n/);

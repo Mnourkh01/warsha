@@ -1,5 +1,5 @@
-import type { PlanDoc, PlanNode, PlanNodeKind } from "../../store/plans";
-import { compareNodes, dependsOf, topoSortNodes } from "./graph";
+import type { EdgeKind, PlanDoc, PlanNode, PlanNodeKind } from "../../store/plans";
+import { compareNodes, topoSortNodes } from "./graph";
 
 // Deterministic markdown for a plan: identical content produces identical output,
 // regardless of array order, node positions, or viewport. Shared by the Export button
@@ -16,6 +16,7 @@ const KIND_ORDER: readonly PlanNodeKind[] = [
   "data",
   "integration",
   "test",
+  "gate",
   "deploy",
   "note",
 ];
@@ -32,6 +33,7 @@ const KIND_HEADINGS: Record<PlanNodeKind, string> = {
   data: "Data models",
   integration: "Integrations",
   test: "Tests",
+  gate: "Gates",
   deploy: "Deploy steps",
   note: "Notes",
 };
@@ -76,18 +78,42 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
   };
 
   const byId = new Map(doc.nodes.map((n) => [n.id, n]));
-  const dependsLine = (n: PlanNode): string | null => {
-    const names = dependsOf(n.id, doc.edges)
-      .map((id) => byId.get(id))
-      .filter((d): d is PlanNode => Boolean(d))
-      .map(ref)
-      .sort((a, b) => {
-        const la = a.toLowerCase();
-        const lb = b.toLowerCase();
-        if (la !== lb) return la < lb ? -1 : 1;
-        return a < b ? -1 : a > b ? 1 : 0;
-      });
-    return names.length > 0 ? `Depends on: ${names.join(", ")}` : null;
+  // Each arrow kind reads differently on the RECEIVING block.
+  const INCOMING_LABEL: Record<EdgeKind, string> = {
+    depends: "Depends on",
+    delegates: "Delegated by",
+    handoff: "Handoff from",
+    tool: "Used as a tool by",
+    calls: "Called by",
+    covers: "Covered by",
+    gates: "Gated by",
+  };
+  const sortNames = (names: string[]) =>
+    [...names].sort((a, b) => {
+      const la = a.toLowerCase();
+      const lb = b.toLowerCase();
+      if (la !== lb) return la < lb ? -1 : 1;
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+  const edgeLines = (n: PlanNode): string[] => {
+    const byKind = new Map<EdgeKind, string[]>();
+    for (const e of doc.edges) {
+      if (e.target !== n.id) continue;
+      const source = byId.get(e.source);
+      if (!source) continue;
+      const kind = e.kind ?? "depends";
+      const list = byKind.get(kind);
+      if (list) list.push(ref(source));
+      else byKind.set(kind, [ref(source)]);
+    }
+    // Deterministic: fixed kind order, names sorted.
+    const order: EdgeKind[] = ["depends", "delegates", "handoff", "tool", "calls", "covers", "gates"];
+    const lines: string[] = [];
+    for (const kind of order) {
+      const names = byKind.get(kind);
+      if (names) lines.push(`${INCOMING_LABEL[kind]}: ${sortNames(names).join(", ")}`);
+    }
+    return lines;
   };
 
   // Sub-line label for the shared list field.
@@ -99,7 +125,7 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
   };
 
   const emitItem = (m: PlanNode) => {
-    const dep = dependsLine(m);
+    const arrowLines = edgeLines(m);
     const desc = m.description ? inline(m.description) : "";
     if (m.kind === "note") {
       push(`> **${ref(m)}**`);
@@ -141,7 +167,7 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     if (m.owner) push(`  - Owner: ${inline(m.owner)}`);
     if (m.due) push(`  - Due: ${inline(m.due)}`);
     if (m.link && /^https?:\/\//i.test(m.link)) push(`  - Link: ${inline(m.link)}`);
-    if (dep) push(`  - ${dep}`);
+    for (const line of arrowLines) push(`  - ${line}`);
   };
 
   const emitMembers = (members: PlanNode[]) => {
@@ -175,10 +201,10 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
       push();
       push(block(p.description));
     }
-    const dep = dependsLine(p);
-    if (dep) {
+    const arrowLines = edgeLines(p);
+    if (arrowLines.length > 0) {
       push();
-      push(dep);
+      for (const line of arrowLines) push(line);
     }
     emitMembers(doc.nodes.filter((n) => n.kind !== "phase" && n.phaseId === p.id));
   }

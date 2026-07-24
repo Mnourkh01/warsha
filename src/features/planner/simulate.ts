@@ -74,10 +74,16 @@ export function buildSimulationPrompt(doc: PlanDoc): string {
     "Plan blocks (id | kind | label | details):",
     ...doc.nodes.map((n) => nodeLine(n, phaseLabelById)),
     "",
-    "Dependencies (prerequisite -> dependent):",
+    "Arrows (source -> target (meaning)); meanings: depends = target needs source first, delegates = target is the source's sub-agent, handoff = control transfers, tool = source uses target as a tool, calls = source calls target, covers = source test covers target, gates = source approval must pass first:",
     ...(doc.edges.length > 0
-      ? doc.edges.map((e) => `${e.source} -> ${e.target}`)
+      ? doc.edges.map((e) => `${e.source} -> ${e.target} (${e.kind ?? "depends"})`)
       : ["(none - no arrows drawn yet)"]),
+    ...(doc.nodes.some((n) => n.kind === "agent" || n.kind === "ai" || n.kind === "gate")
+      ? [
+          "",
+          "Because this plan contains AI/agent blocks, also check these known multi-agent failure modes: context loss at handoffs (key info summarized away), circular delegation, missing exit/termination conditions (agent runs forever), vague role boundaries (duplicated or missed work), no output contract between agents, unverified outputs (no test or gate on agent results), overlapping tool permissions (two agents writing the same thing), token cost explosion (parallel agents whose subtasks are not independent), and gates missing around risky actions.",
+        ]
+      : []),
   ].join("\n");
 }
 

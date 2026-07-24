@@ -20,6 +20,7 @@ export const PLAN_NODE_KINDS = [
   "integration",
   "test",
   "deploy",
+  "gate",
 ] as const;
 export type PlanNodeKind = (typeof PLAN_NODE_KINDS)[number];
 
@@ -105,10 +106,21 @@ export interface PlanNode {
   fields?: PlanField[];
 }
 
+/** Arrow semantics. Absent = "depends": the target needs the source first.
+ *  delegates: source assigns work to target (target becomes a sub-agent).
+ *  handoff: control transfers entirely from source to target.
+ *  tool: source uses target as a callable tool.
+ *  calls: source calls target (screen calls api, service calls service).
+ *  covers: source (a test) covers the target.
+ *  gates: source (a gate) must approve before the target proceeds. */
+export const EDGE_KINDS = ["depends", "delegates", "handoff", "tool", "calls", "covers", "gates"] as const;
+export type EdgeKind = (typeof EDGE_KINDS)[number];
+
 export interface PlanEdge {
   id: string;
   source: string;
   target: string;
+  kind?: EdgeKind;
   label?: string;
 }
 
@@ -247,6 +259,10 @@ export function sanitizePlanDoc(raw: unknown): PlanDoc | null {
       id: ee.id,
       source: ee.source,
       target: ee.target,
+      kind:
+        (EDGE_KINDS as readonly string[]).includes(ee.kind as string) && ee.kind !== "depends"
+          ? (ee.kind as EdgeKind)
+          : undefined,
       label: cleanStr(ee.label, MAX_EDGE_LABEL),
     });
     if (edges.length >= MAX_PLAN_EDGES) break;

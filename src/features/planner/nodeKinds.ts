@@ -9,6 +9,7 @@ import {
   Plug,
   Rocket,
   Server,
+  ShieldCheck,
   Sparkles,
   SquareCheck,
   StickyNote,
@@ -43,6 +44,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
   { kind: "data", icon: Database, group: "build", tint: "yellow" },
   { kind: "integration", icon: Plug, group: "build", tint: "orange" },
   { kind: "test", icon: FlaskConical, group: "ship", tint: "green" },
+  { kind: "gate", icon: ShieldCheck, group: "ship", tint: "red" },
   { kind: "deploy", icon: Rocket, group: "ship", tint: "blue" },
 ];
 

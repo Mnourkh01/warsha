@@ -30,7 +30,7 @@ export function buildImprovePrompt(doc: PlanDoc, improvements: string[]): string
   const slim = {
     name: doc.name,
     nodes: doc.nodes.map(({ x: _x, y: _y, tint: _tint, ...rest }) => rest),
-    edges: doc.edges.map((e) => ({ source: e.source, target: e.target })),
+    edges: doc.edges.map((e) => ({ source: e.source, target: e.target, kind: e.kind })),
   };
   const goals =
     improvements.length > 0
@@ -40,7 +40,7 @@ export function buildImprovePrompt(doc: PlanDoc, improvements: string[]): string
     "You are improving a project plan drawn on a visual canvas (blocks connected by dependency arrows).",
     "",
     ...goals,
-    'Respond with ONLY one JSON object, no fences, no prose: {"nodes": [...], "edges": [{"source": string, "target": string}]}.',
+    'Respond with ONLY one JSON object, no fences, no prose: {"nodes": [...], "edges": [{"source": string, "target": string, "kind"?: "depends" | "delegates" | "handoff" | "tool" | "calls" | "covers" | "gates"}]}.',
     "Rules:",
     "- Keep the exact id of every block you keep; give NEW blocks new short unique ids.",
     "- Allowed kinds: phase | task | decision | note | screen | api | service | ai | agent | data | integration | test | deploy.",
@@ -125,7 +125,7 @@ export function draftFromAnswer(raw: string, current: PlanDoc): { draft: PlanDoc
     nodes: placed,
     edges: rawEdges.map((e) => {
       const ee = e && typeof e === "object" ? (e as Record<string, unknown>) : {};
-      return { id: uid(), source: ee.source, target: ee.target };
+      return { id: uid(), source: ee.source, target: ee.target, kind: ee.kind };
     }),
     viewport: current.viewport,
     updatedAt: Date.now(),
