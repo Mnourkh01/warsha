@@ -44,8 +44,9 @@ export function buildDraftRequestPrompt(opts: { cwd: string }): string {
     "Do this:",
     "1. Read .warsha/BLUEPRINT.md in this folder - it defines the exact plan JSON format. If the file is missing, ask me for the format before writing anything.",
     "2. Study the project first (README, manifests, source layout). If the folder is empty or the goal is unclear, ask me 3 to 5 short questions before planning.",
-    "3. Write the full plan to .warsha/plan.draft.json: 2 to 4 phases with exit criteria, tasks with acceptance criteria, risks as risk notes, a gate before anything irreversible, tests, and a deploy step with a rollback plan.",
-    "4. Tell me when it is written - I will load it on the Blueprint and review it there.",
+    "3. Write the full plan to .warsha/plan.draft.json. Model the product as a working system first, not a task list: every screen the user touches, every api endpoint, the services behind them, the data models they read and write, integrations, and ai/agent blocks where a model runs - wired with calls/tool arrows so one user action can be followed end to end (screen -> api -> service -> data). Use task blocks only for work that is not a system part (setup, docs, research).",
+    "4. Then add the delivery layer on top: 2 to 4 phases with exit criteria (attach blocks via phaseId), risks as risk notes near the blocks they threaten, a gate before anything irreversible, tests covering the main flows, and a deploy step with a rollback plan.",
+    "5. Tell me when it is written - I will load it on the Blueprint and review it there.",
   ].join("\n");
 }
 

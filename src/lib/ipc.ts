@@ -110,6 +110,92 @@ export async function planSpecSave(dir: string, spec: string): Promise<void> {
   await invoke("plan_spec_save", { dir, spec });
 }
 
+/* ---- radar (what is running right now) --------------------------------------- */
+
+export interface RadarProcEntry {
+  pid: number;
+  name: string;
+  cmd: string;
+  /** Unix seconds the process started; 0 = unknown. */
+  startedAt: number;
+}
+
+export interface RadarSessionProcs {
+  sessionId: string;
+  shellPid: number;
+  procs: RadarProcEntry[];
+}
+
+export interface RadarPortListener {
+  port: number;
+  pid: number;
+  name: string;
+  sessionId: string | null;
+  /** Unix seconds the owning process started; 0 = unknown. */
+  startedAt: number;
+}
+
+export interface RadarMcpProc {
+  pid: number;
+  name: string;
+  label: string;
+  cmd: string;
+  sessionId: string | null;
+  /** Unix seconds the process started; 0 = unknown. */
+  startedAt: number;
+}
+
+export interface RadarContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  ports: string;
+}
+
+export type RadarDockerStatus = "ok" | "notInstalled" | "engineOff" | "error";
+
+export interface RadarDockerInfo {
+  status: RadarDockerStatus;
+  containers: RadarContainer[];
+}
+
+export interface RadarSnapshot {
+  sessions: RadarSessionProcs[];
+  ports: RadarPortListener[];
+  mcp: RadarMcpProc[];
+  docker: RadarDockerInfo;
+}
+
+/** One full radar pass: per-session process trees, listening ports, MCP hosts,
+ *  docker containers. Read-only; safe to poll. */
+export async function radarSnapshot(): Promise<RadarSnapshot> {
+  return await invoke<RadarSnapshot>("radar_snapshot");
+}
+
+export interface SessionAiDetection {
+  sessionId: string;
+  /** Wizard type id ("claude" | "gemini" | "codex") or null for a plain shell. */
+  ai: string | null;
+}
+
+/** Which AI CLI each session runs right now (one cheap process pass, poll-safe).
+ *  Drives the live session icon when an AI is launched by hand in a plain shell. */
+export async function sessionAiProbe(): Promise<SessionAiDetection[]> {
+  return await invoke<SessionAiDetection[]>("session_ai_probe");
+}
+
+/** Kill a process tree from the radar. Rust refuses Warsha itself and session
+ *  shells (close the pane instead), and surfaces taskkill's reason on failure. */
+export async function radarKillProcess(pid: number): Promise<void> {
+  await invoke("radar_kill_process", { pid });
+}
+
+/** Gracefully stop a docker container (docker stop, engine grace period applies). */
+export async function radarDockerStop(id: string): Promise<void> {
+  await invoke("radar_docker_stop", { id });
+}
+
 export interface ShellCheckResult {
   ok: boolean;
   /** Short reason when not ok (trimmed program output). */

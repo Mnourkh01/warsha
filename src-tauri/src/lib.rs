@@ -2,6 +2,7 @@
 
 mod commands;
 mod headless;
+mod monitor;
 mod pty;
 mod session;
 mod shells;
@@ -53,6 +54,10 @@ pub fn run() {
             commands::plan_draft_read,
             commands::plan_draft_consume,
             commands::plan_spec_save,
+            monitor::radar_snapshot,
+            monitor::radar_kill_process,
+            monitor::radar_docker_stop,
+            monitor::session_ai_probe,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

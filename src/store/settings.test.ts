@@ -44,6 +44,34 @@ describe("settings hydrate sanitization", () => {
     expect("locale" in useSettings.getState().serialize()).toBe(false);
   });
 
+  it("sanitizes shortcut overrides: unknown actions, bad chords, duplicates, restated defaults", () => {
+    useSettings.getState().hydrate({
+      shortcuts: {
+        workspaceNext: "Ctrl+Alt+Right", // valid override
+        sessionNext: "Ctrl+PageDown", // restates its own default -> dropped
+        sidebar: "Shift+B", // no Ctrl/Alt -> dropped
+        find: "Ctrl+Alt+Right", // duplicate of workspaceNext -> dropped
+        bogusAction: "Ctrl+Alt+Q", // unknown action -> dropped
+      } as never,
+    });
+    expect(useSettings.getState().shortcuts).toEqual({ workspaceNext: "Ctrl+Alt+Right" });
+    // non-object blob values collapse to undefined
+    useSettings.getState().hydrate({ shortcuts: "Ctrl+K" as never });
+    expect(useSettings.getState().shortcuts).toBeUndefined();
+  });
+
+  it("setShortcut stores overrides, drops resets and default restatements", () => {
+    useSettings.getState().hydrate({});
+    useSettings.getState().setShortcut("palette", "Ctrl+Alt+K");
+    expect(useSettings.getState().shortcuts).toEqual({ palette: "Ctrl+Alt+K" });
+    // setting the primary default again removes the override
+    useSettings.getState().setShortcut("palette", "Ctrl+K");
+    expect(useSettings.getState().shortcuts).toBeUndefined();
+    useSettings.getState().setShortcut("maximize", "Ctrl+Alt+M");
+    useSettings.getState().resetShortcuts();
+    expect(useSettings.getState().shortcuts).toBeUndefined();
+  });
+
   it("normalizes optional strings and booleans", () => {
     useSettings.getState().hydrate({
       termForeground: "   ",

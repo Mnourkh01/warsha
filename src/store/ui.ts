@@ -6,6 +6,8 @@ interface UIState {
   settingsOpen: boolean;
   newSessionOpen: boolean;
   shortcutsOpen: boolean;
+  /** Radar dialog: what is running right now (ports, docker, MCP, session trees). */
+  radarOpen: boolean;
   sidebarOpen: boolean;
   /** Sidebar width in px (drag-resizable). Not persisted, resets on restart. */
   sidebarWidth: number;
@@ -26,6 +28,7 @@ interface UIState {
   setSettings: (v: boolean) => void;
   setNewSession: (v: boolean) => void;
   setShortcuts: (v: boolean) => void;
+  setRadar: (v: boolean) => void;
   setSidebar: (v: boolean) => void;
   setSidebarWidth: (w: number) => void;
   toggleSidebar: () => void;
@@ -44,6 +47,7 @@ export const useUI = create<UIState>((set) => ({
   settingsOpen: false,
   newSessionOpen: false,
   shortcutsOpen: false,
+  radarOpen: false,
   sidebarOpen: true,
   sidebarWidth: 264,
   maximizedSessionId: null,
@@ -55,6 +59,7 @@ export const useUI = create<UIState>((set) => ({
   setSettings: (settingsOpen) => set({ settingsOpen }),
   setNewSession: (newSessionOpen) => set({ newSessionOpen }),
   setShortcuts: (shortcutsOpen) => set({ shortcutsOpen }),
+  setRadar: (radarOpen) => set({ radarOpen }),
   setSidebar: (sidebarOpen) => set({ sidebarOpen }),
   // Clamp so the sidebar can never be dragged uselessly narrow or eat the whole window.
   setSidebarWidth: (w) => set({ sidebarWidth: Math.max(200, Math.min(520, Math.round(w))) }),

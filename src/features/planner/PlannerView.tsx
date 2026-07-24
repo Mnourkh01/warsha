@@ -4,10 +4,12 @@ import {
   Bot,
   ClipboardCheck,
   FileDown,
+  Info,
   LayoutGrid,
   Play,
   Send,
   Sparkles,
+  TriangleAlert,
   Workflow,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
@@ -25,6 +27,7 @@ import { useSettings } from "../../store/settings";
 import { sanitizePlanDoc, usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
 import { useWorkspaces } from "../../store/workspaces";
+import { mirrorCollisions, resolveMirrorCwd, sessionsOffMirror } from "./mirrorScope";
 import { PlanCanvas } from "./PlanCanvas";
 import { ReviewPanel, type ImproveState, type ReviewState } from "./ReviewPanel";
 import { SendToAiModal } from "./SendToAiModal";
@@ -54,6 +57,9 @@ export function PlannerView() {
   const t = useStrings();
   const wsId = useWorkspaces((s) => s.activeWorkspaceId);
   const ws = useWorkspaces((s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId));
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const sessions = useWorkspaces((s) => s.sessions);
+  const allPlans = usePlans((s) => s.plans);
   const globalCwd = useSettings((s) => s.defaultCwd);
   const doc = usePlans((s) => s.plans[wsId]);
   const renamePlan = usePlans((s) => s.renamePlan);
@@ -89,7 +95,21 @@ export function PlannerView() {
     return () => clearTimeout(timer);
   }, [copied]);
 
-  const cwd = ws?.defaultCwd ?? globalCwd;
+  const cwd = resolveMirrorCwd(ws, globalCwd);
+
+  // Scope notices (gap guards): another workspace mirroring to the same folder means
+  // the two plan.md files overwrite each other; sessions running elsewhere have AIs
+  // that never see this plan. The info-tone notices are dismissible per workspace,
+  // the collision one stays until the folders actually differ.
+  const collisions = mirrorCollisions({
+    workspaces,
+    wsId,
+    globalCwd,
+    hasPlan: (id) => (allPlans[id]?.nodes.length ?? 0) > 0,
+  });
+  const offMirror = sessionsOffMirror(ws, sessions, cwd);
+  const [scopeDismissed, setScopeDismissed] = useState(false);
+  useEffect(() => setScopeDismissed(false), [wsId]);
 
   // Mirror the plan to <cwd>/.warsha/plan.md (debounced) so any AI CLI working in the
   // project folder - claude, codex, gemini - can read the current plan on request.
@@ -294,6 +314,13 @@ export function PlannerView() {
           value={doc.name}
           onChange={(e) => renamePlan(wsId, e.target.value)}
         />
+        <span
+          className="planner-ws-chip bidi-auto"
+          dir="auto"
+          title={cwd ? t.planWsChipTitle(cwd) : t.planWsChipNoFolder}
+        >
+          {wsName}
+        </span>
         <span className="planner-count">{t.planNodeCount(doc.nodes.length)}</span>
         <span className="spacer" />
         <button className="btn-ghost" disabled={doc.nodes.length < 2} onClick={tidyLayout}>
@@ -335,6 +362,21 @@ export function PlannerView() {
           {t.closePlanner}
         </button>
       </header>
+      {collisions.length > 0 && (
+        <div className="plan-scope-bar plan-scope-warn" role="alert">
+          <TriangleAlert size={14} />
+          <span>{t.planMirrorCollision(collisions.join(", "))}</span>
+        </div>
+      )}
+      {!scopeDismissed && (offMirror.length > 0 || !cwd) && (
+        <div className="plan-scope-bar" role="status">
+          <Info size={14} />
+          <span>{cwd ? t.planSessionsOffMirror(offMirror.length) : t.planNoMirrorFolder}</span>
+          <button className="btn-ghost" onClick={() => setScopeDismissed(true)}>
+            {t.close}
+          </button>
+        </div>
+      )}
       {draft.status !== "none" && (
         <div className="plan-draft-bar" role="status">
           <Bot size={14} />

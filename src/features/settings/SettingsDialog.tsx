@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Minus, Plus, X } from "lucide-react";
+import { Keyboard, Minus, Paintbrush, Plus, RefreshCw, Terminal, X } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, type TerminalTheme } from "../../store/settings";
 import { useUI } from "../../store/ui";
@@ -9,8 +9,9 @@ import { termScheme } from "../../actions";
 import { pickFolder } from "../../lib/ipc";
 import { checkForUpdate, installUpdate } from "../../lib/updater";
 import { DialogTrap } from "../../lib/dialog-trap";
-import { useStrings } from "../../lib/i18n";
+import { useStrings, type Strings } from "../../lib/i18n";
 import { SHELL_TYPES } from "../../lib/sessionTypes";
+import { ShortcutsSection } from "./ShortcutsSection";
 import type { ShellKind, ThemeMode } from "../../lib/types";
 
 const THEMES: ThemeMode[] = ["dark", "light", "system"];
@@ -26,6 +27,15 @@ const SHELLS: { value: string; label: string; shell: ShellKind }[] = SHELL_TYPES
   shell: s.shell,
 }));
 
+type Tab = "appearance" | "terminal" | "shortcuts" | "updates";
+
+const TABS: { id: Tab; icon: typeof Paintbrush; label: (t: Strings) => string }[] = [
+  { id: "appearance", icon: Paintbrush, label: (t) => t.settingsTabAppearance },
+  { id: "terminal", icon: Terminal, label: (t) => t.settingsTabTerminal },
+  { id: "shortcuts", icon: Keyboard, label: (t) => t.settingsTabShortcuts },
+  { id: "updates", icon: RefreshCw, label: (t) => t.settingsTabUpdates },
+];
+
 export function SettingsDialog() {
   const open = useUI((s) => s.settingsOpen);
   const setSettings = useUI((s) => s.setSettings);
@@ -38,6 +48,7 @@ export function SettingsDialog() {
   const defaultCwd = useSettings((s) => s.defaultCwd);
   const t = useStrings();
   const boxRef = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<Tab>("appearance");
   const [pickError, setPickError] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const [upd, setUpd] = useState<{
@@ -108,7 +119,13 @@ export function SettingsDialog() {
         if (e.target === e.currentTarget) setSettings(false);
       }}
     >
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={t.settings} ref={boxRef}>
+      <div
+        className="dialog settings-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.settings}
+        ref={boxRef}
+      >
         <DialogTrap containerRef={boxRef} />
         <div className="dialog-header">
           {t.settings}
@@ -122,183 +139,210 @@ export function SettingsDialog() {
             <X size={16} />
           </button>
         </div>
-        <div className="dialog-body">
-          <div className="field">
-            <span className="field-label">{t.appTheme}</span>
-            <div className="seg">
-              {THEMES.map((m) => (
-                <button
-                  key={m}
-                  className={theme === m ? "on" : ""}
-                  onClick={() => setTheme(m)}
-                >
-                  {m === "dark" ? t.themeDark : m === "light" ? t.themeLight : t.themeSystem}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <span className="field-label">
-              {t.terminalColors} <span className="field-hint">{t.terminalColorsHint}</span>
-            </span>
-            <div className="seg">
-              {TERM_THEMES.map((m) => (
-                <button
-                  key={m}
-                  className={terminalTheme === m ? "on" : ""}
-                  onClick={() => setTermTheme(m)}
-                >
-                  {m === "match" ? t.matchApp : m === "dark" ? t.themeDark : t.themeLight}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field">
-            <div className="field-row">
-              <span className="field-label">{t.terminalFontSize}</span>
-              <div className="stepper">
-                <button
-                  className="icon-btn"
-                  title={t.smaller}
-                  aria-label={t.decreaseFont}
-                  onClick={() => setFont(fontSize - 1)}
-                >
-                  <Minus size={14} />
-                </button>
-                <span className="val" aria-live="polite">{fontSize}</span>
-                <button
-                  className="icon-btn"
-                  title={t.larger}
-                  aria-label={t.increaseFont}
-                  onClick={() => setFont(fontSize + 1)}
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="field">
-            <div className="field-row">
-              <span className="field-label">{t.terminalTextWeight}</span>
-              <div className="seg">
-                <button className={!termBold ? "on" : ""} onClick={() => setBold(false)}>
-                  {t.weightNormal}
-                </button>
-                <button className={termBold ? "on" : ""} onClick={() => setBold(true)}>
-                  {t.weightBold}
-                </button>
-              </div>
-            </div>
-          </div>
-
-
-          <div className="field">
-            <div className="field-row">
-              <span className="field-label">{t.terminalTextColor}</span>
-              <div className="stepper">
-                <input
-                  type="color"
-                  className="color-input"
-                  aria-label={t.terminalTextColor}
-                  value={fgValue}
-                  onChange={(e) => setFg(e.target.value)}
-                />
-                <button className="btn-ghost" onClick={() => setFg(undefined)}>
-                  {t.themeDefault}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="field">
-            <span className="field-label">{t.defaultShellLabel}</span>
-            <select
-              className="select"
-              value={shellValue}
-              onChange={(e) => {
-                const pick = SHELLS.find((sh) => sh.value === e.target.value);
-                if (pick) useSettings.getState().setDefaultShell(pick.shell);
-              }}
-            >
-              {defaultShell.kind === "custom" && shellValue === "custom" && (
-                <option value="custom" disabled>
-                  {t.customShell(defaultShell.program)}
-                </option>
-              )}
-              {SHELLS.map((sh) => (
-                <option key={sh.value} value={sh.value}>
-                  {sh.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <span className="field-label">
-              {t.defaultFolderLabel} <span className="field-hint">{t.defaultFolderHint}</span>
-            </span>
-            <div className="folder-set">
-              <span className="folder-set-path bidi-auto" dir="ltr">
-                {defaultCwd || t.notSet}
-              </span>
+        <div className="settings-layout">
+          <nav className="settings-nav" aria-label={t.settings}>
+            {TABS.map(({ id, icon: Icon, label }) => (
               <button
-                className="btn-ghost"
-                onClick={async () => {
-                  setPickError(null);
-                  try {
-                    const dir = await pickFolder(t.chooseDefaultFolder);
-                    if (dir) useSettings.getState().setDefaultCwd(dir);
-                  } catch (e) {
-                    console.warn("folder picker failed", e);
-                    setPickError(t.pickerFailed);
-                  }
-                }}
+                key={id}
+                className={tab === id ? "on" : ""}
+                aria-current={tab === id}
+                onClick={() => setTab(id)}
               >
-                {t.browse}
+                <Icon size={15} />
+                {label(t)}
               </button>
-              {defaultCwd ? (
-                <button className="btn-ghost" onClick={() => useSettings.getState().setDefaultCwd("")}>
-                  {t.clear}
-                </button>
-              ) : null}
-            </div>
-            {pickError && <div className="picker-error">{pickError}</div>}
-          </div>
+            ))}
+          </nav>
+          <div className="settings-pane">
+            {tab === "appearance" && (
+              <>
+                <div className="field">
+                  <span className="field-label">{t.appTheme}</span>
+                  <div className="seg">
+                    {THEMES.map((m) => (
+                      <button key={m} className={theme === m ? "on" : ""} onClick={() => setTheme(m)}>
+                        {m === "dark" ? t.themeDark : m === "light" ? t.themeLight : t.themeSystem}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          <div className="field">
-            <div className="field-row">
-              <span className="field-label">
-                {t.updatesLabel}{" "}
-                {appVersion && <span className="field-hint">{t.currentVersion(appVersion)}</span>}
-              </span>
-              {upd.phase === "found" && upd.version ? (
-                <button className="btn-ghost" onClick={installNow}>
-                  {t.updateTo(upd.version)}
-                </button>
-              ) : (
-                <button
-                  className="btn-ghost"
-                  disabled={upd.phase === "checking" || upd.phase === "installing"}
-                  onClick={() => void checkNow()}
-                >
-                  {t.updateCheckNow}
-                </button>
-              )}
-            </div>
-            {upd.phase !== "idle" && upd.phase !== "found" && (
-              <div className="field-hint" aria-live="polite">
-                {upd.phase === "checking"
-                  ? t.updateChecking
-                  : upd.phase === "none"
-                    ? t.updateUpToDate
-                    : upd.phase === "installing"
-                      ? upd.progress === 100
-                        ? t.updateInstalling
-                        : t.updateDownloading(upd.progress ?? null)
-                      : t.updateFailed}
+                <div className="field">
+                  <span className="field-label">
+                    {t.terminalColors} <span className="field-hint">{t.terminalColorsHint}</span>
+                  </span>
+                  <div className="seg">
+                    {TERM_THEMES.map((m) => (
+                      <button
+                        key={m}
+                        className={terminalTheme === m ? "on" : ""}
+                        onClick={() => setTermTheme(m)}
+                      >
+                        {m === "match" ? t.matchApp : m === "dark" ? t.themeDark : t.themeLight}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="field">
+                  <div className="field-row">
+                    <span className="field-label">{t.terminalFontSize}</span>
+                    <div className="stepper">
+                      <button
+                        className="icon-btn"
+                        title={t.smaller}
+                        aria-label={t.decreaseFont}
+                        onClick={() => setFont(fontSize - 1)}
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <span className="val" aria-live="polite">
+                        {fontSize}
+                      </span>
+                      <button
+                        className="icon-btn"
+                        title={t.larger}
+                        aria-label={t.increaseFont}
+                        onClick={() => setFont(fontSize + 1)}
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <div className="field-row">
+                    <span className="field-label">{t.terminalTextWeight}</span>
+                    <div className="seg">
+                      <button className={!termBold ? "on" : ""} onClick={() => setBold(false)}>
+                        {t.weightNormal}
+                      </button>
+                      <button className={termBold ? "on" : ""} onClick={() => setBold(true)}>
+                        {t.weightBold}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <div className="field-row">
+                    <span className="field-label">{t.terminalTextColor}</span>
+                    <div className="stepper">
+                      <input
+                        type="color"
+                        className="color-input"
+                        aria-label={t.terminalTextColor}
+                        value={fgValue}
+                        onChange={(e) => setFg(e.target.value)}
+                      />
+                      <button className="btn-ghost" onClick={() => setFg(undefined)}>
+                        {t.themeDefault}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {tab === "terminal" && (
+              <>
+                <div className="field">
+                  <span className="field-label">{t.defaultShellLabel}</span>
+                  <select
+                    className="select"
+                    value={shellValue}
+                    onChange={(e) => {
+                      const pick = SHELLS.find((sh) => sh.value === e.target.value);
+                      if (pick) useSettings.getState().setDefaultShell(pick.shell);
+                    }}
+                  >
+                    {defaultShell.kind === "custom" && shellValue === "custom" && (
+                      <option value="custom" disabled>
+                        {t.customShell(defaultShell.program)}
+                      </option>
+                    )}
+                    {SHELLS.map((sh) => (
+                      <option key={sh.value} value={sh.value}>
+                        {sh.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <span className="field-label">
+                    {t.defaultFolderLabel} <span className="field-hint">{t.defaultFolderHint}</span>
+                  </span>
+                  <div className="folder-set">
+                    <span className="folder-set-path bidi-auto" dir="ltr">
+                      {defaultCwd || t.notSet}
+                    </span>
+                    <button
+                      className="btn-ghost"
+                      onClick={async () => {
+                        setPickError(null);
+                        try {
+                          const dir = await pickFolder(t.chooseDefaultFolder);
+                          if (dir) useSettings.getState().setDefaultCwd(dir);
+                        } catch (e) {
+                          console.warn("folder picker failed", e);
+                          setPickError(t.pickerFailed);
+                        }
+                      }}
+                    >
+                      {t.browse}
+                    </button>
+                    {defaultCwd ? (
+                      <button
+                        className="btn-ghost"
+                        onClick={() => useSettings.getState().setDefaultCwd("")}
+                      >
+                        {t.clear}
+                      </button>
+                    ) : null}
+                  </div>
+                  {pickError && <div className="picker-error">{pickError}</div>}
+                </div>
+              </>
+            )}
+
+            {tab === "shortcuts" && <ShortcutsSection />}
+
+            {tab === "updates" && (
+              <div className="field">
+                <div className="field-row">
+                  <span className="field-label">
+                    {t.updatesLabel}{" "}
+                    {appVersion && <span className="field-hint">{t.currentVersion(appVersion)}</span>}
+                  </span>
+                  {upd.phase === "found" && upd.version ? (
+                    <button className="btn-ghost" onClick={installNow}>
+                      {t.updateTo(upd.version)}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-ghost"
+                      disabled={upd.phase === "checking" || upd.phase === "installing"}
+                      onClick={() => void checkNow()}
+                    >
+                      {t.updateCheckNow}
+                    </button>
+                  )}
+                </div>
+                {upd.phase !== "idle" && upd.phase !== "found" && (
+                  <div className="field-hint" aria-live="polite">
+                    {upd.phase === "checking"
+                      ? t.updateChecking
+                      : upd.phase === "none"
+                        ? t.updateUpToDate
+                        : upd.phase === "installing"
+                          ? upd.progress === 100
+                            ? t.updateInstalling
+                            : t.updateDownloading(upd.progress ?? null)
+                          : t.updateFailed}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -7,19 +7,23 @@ import { CommandPalette } from "./features/command-palette/CommandPalette";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
 import { NewSessionDialog } from "./features/new-session/NewSessionDialog";
 import { ShortcutsDialog } from "./features/shortcuts/ShortcutsDialog";
+import { RadarDialog } from "./features/radar/RadarDialog";
 import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useWorkspaces } from "./store/workspaces";
 import { useUI } from "./store/ui";
 import { useRuntime } from "./store/runtime";
+import { useRadar } from "./store/radar";
 import { openSession, switchWorkspace } from "./actions";
 import { applyTheme, resolveTheme, setSystemTheme } from "./lib/theme";
 import { applySettingsToAll, getTerminal } from "./features/terminal/controller";
+import { isCapturingShortcut, matchAction } from "./features/shortcuts/registry";
 import { noteExit } from "./features/terminal/attention";
 import { useStrings } from "./lib/i18n";
 import {
   onPtyExit,
   onWindowThemeChanged,
   openExternal,
+  sessionAiProbe,
   setWindowTheme,
   windowTheme,
 } from "./lib/ipc";
@@ -74,6 +78,7 @@ export default function App() {
   const theme = useSettings((s) => s.theme);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const sidebarOpen = useUI((s) => s.sidebarOpen);
+  const radarOpen = useUI((s) => s.radarOpen);
   const t = useStrings();
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const [updatePhase, setUpdatePhase] = useState<"offer" | "installing" | "error">("offer");
@@ -146,6 +151,31 @@ export default function App() {
     };
   }, []);
 
+  // Radar polling: slow ambient refresh keeps the TitleBar badge honest, fast while
+  // the dialog is open. The interval swap re-runs the effect, which also fires an
+  // immediate refresh the moment the dialog opens.
+  useEffect(() => {
+    const tick = () => void useRadar.getState().refresh();
+    tick();
+    const interval = setInterval(tick, radarOpen ? 3000 : 20000);
+    return () => clearInterval(interval);
+  }, [radarOpen]);
+
+  // Live AI detection: session icons follow what actually runs in each shell (the
+  // user types `claude` into plain PowerShell, the icon flips; the CLI exits, it
+  // flips back). Separate from the radar poll: this probe is one cheap process pass,
+  // so it can afford a 5s cadence without dragging netstat/docker along.
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return; // tests / plain browser
+    const tick = () =>
+      void sessionAiProbe()
+        .then((list) => useRuntime.getState().setDetectedAi(list))
+        .catch((e) => console.debug("ai probe failed", e));
+    tick();
+    const interval = setInterval(tick, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // One update check per launch, delayed so it never competes with session restore.
   // Silent on every failure path (offline, endpoint missing) by design; the settings
   // dialog has the loud, user-initiated check.
@@ -174,7 +204,7 @@ export default function App() {
       if (!sid) return;
       useRuntime.getState().clearAttention(sid);
       const dialogOpen =
-        ui.paletteOpen || ui.newSessionOpen || ui.settingsOpen || ui.shortcutsOpen;
+        ui.paletteOpen || ui.newSessionOpen || ui.settingsOpen || ui.shortcutsOpen || ui.radarOpen;
       if (!dialogOpen && !ui.plannerOpen) getTerminal(sid)?.focus();
     };
     window.addEventListener("focus", onFocus);
@@ -186,57 +216,57 @@ export default function App() {
   // Ctrl+Shift+P is a palette alias for muscle memory from other terminals.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // The settings capture UI is recording a new chord: it owns the keyboard.
+      if (isCapturingShortcut()) return;
       const ui = useUI.getState();
       const key = e.key.toLowerCase();
-      const paletteChord =
-        e.ctrlKey && !e.altKey && ((!e.shiftKey && key === "k") || (e.shiftKey && key === "p"));
-      if (paletteChord) {
+      // Rebindable actions resolve through the shortcut registry (Settings can remap
+      // them). Chords are intercepted at capture so they never reach the shell.
+      const action = matchAction(e, useSettings.getState().shortcuts ?? {});
+      if (action) {
         e.preventDefault();
         e.stopPropagation();
-        ui.setPalette(!ui.paletteOpen);
-      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "b") {
-        e.preventDefault();
-        e.stopPropagation();
-        ui.toggleSidebar();
-      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "f") {
-        e.preventDefault();
-        e.stopPropagation();
-        if (useWorkspaces.getState().activeSessionId) ui.setFind(true);
-      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "m") {
-        e.preventDefault();
-        e.stopPropagation();
-        const sid = useWorkspaces.getState().activeSessionId;
-        if (sid) ui.toggleMaximized(sid);
-      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "i") {
-        // Broadcast typing to the whole workspace. Shift chord so plain Ctrl+I (Tab in
-        // some TUIs) still reaches the terminal.
-        e.preventDefault();
-        e.stopPropagation();
-        ui.toggleBroadcast();
-      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "d") {
-        // Plan canvas mode for the active workspace.
-        e.preventDefault();
-        e.stopPropagation();
-        ui.togglePlanner();
-      } else if (e.ctrlKey && !e.altKey && (e.key === "PageDown" || e.key === "PageUp")) {
-        // Cycle sessions (Ctrl) or workspaces (Ctrl+Shift), wrap-around, browser-tab
-        // convention. Intercepted at capture so the chord never reaches the shell.
-        e.preventDefault();
-        e.stopPropagation();
-        const dir = e.key === "PageDown" ? 1 : -1;
         const ws = useWorkspaces.getState();
-        if (e.shiftKey) {
-          const list = ws.workspaces;
-          if (list.length > 1) {
-            const i = list.findIndex((w) => w.id === ws.activeWorkspaceId);
-            switchWorkspace(list[(i + dir + list.length) % list.length].id);
+        switch (action) {
+          case "palette":
+            ui.setPalette(!ui.paletteOpen);
+            break;
+          case "sidebar":
+            ui.toggleSidebar();
+            break;
+          case "find":
+            if (ws.activeSessionId) ui.setFind(true);
+            break;
+          case "maximize":
+            if (ws.activeSessionId) ui.toggleMaximized(ws.activeSessionId);
+            break;
+          case "broadcast":
+            // Broadcast typing to the whole workspace.
+            ui.toggleBroadcast();
+            break;
+          case "blueprint":
+            ui.togglePlanner();
+            break;
+          case "workspaceNext":
+          case "workspacePrev": {
+            const dir = action === "workspaceNext" ? 1 : -1;
+            const list = ws.workspaces;
+            if (list.length > 1) {
+              const i = list.findIndex((w) => w.id === ws.activeWorkspaceId);
+              switchWorkspace(list[(i + dir + list.length) % list.length].id);
+            }
+            break;
           }
-        } else {
-          const active = ws.workspaces.find((w) => w.id === ws.activeWorkspaceId);
-          const ids = active?.sessionIds ?? [];
-          if (ids.length > 1) {
-            const i = ids.indexOf(ws.activeSessionId ?? "");
-            openSession(ids[(Math.max(i, 0) + dir + ids.length) % ids.length]);
+          case "sessionNext":
+          case "sessionPrev": {
+            const dir = action === "sessionNext" ? 1 : -1;
+            const active = ws.workspaces.find((w) => w.id === ws.activeWorkspaceId);
+            const ids = active?.sessionIds ?? [];
+            if (ids.length > 1) {
+              const i = ids.indexOf(ws.activeSessionId ?? "");
+              openSession(ids[(Math.max(i, 0) + dir + ids.length) % ids.length]);
+            }
+            break;
           }
         }
       } else if (e.key === "Escape") {
@@ -246,6 +276,7 @@ export default function App() {
         else if (ui.newSessionOpen) ui.setNewSession(false);
         else if (ui.settingsOpen) ui.setSettings(false);
         else if (ui.shortcutsOpen) ui.setShortcuts(false);
+        else if (ui.radarOpen) ui.setRadar(false);
         else if (ui.findOpen) ui.setFind(false);
       } else if (
         ((e.ctrlKey && !e.altKey && (e.code === "KeyV" || key === "v")) ||
@@ -255,6 +286,7 @@ export default function App() {
         !ui.newSessionOpen &&
         !ui.settingsOpen &&
         !ui.shortcutsOpen &&
+        !ui.radarOpen &&
         !ui.plannerOpen
       ) {
         // A paste chord that landed on the app chrome (not the terminal, not a field):
@@ -317,6 +349,7 @@ export default function App() {
       <SettingsDialog />
       <NewSessionDialog />
       <ShortcutsDialog />
+      <RadarDialog />
       {update && (
         <div className="update-toast" role="status">
           <span className="update-text">

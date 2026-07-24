@@ -1,5 +1,11 @@
 import { create } from "zustand";
 import type { ShellKind, ThemeMode } from "../lib/types";
+import {
+  SHORTCUT_DEFS,
+  isValidChord,
+  type ShortcutAction,
+  type ShortcutOverrides,
+} from "../features/shortcuts/registry";
 
 // Terminal color scheme is INDEPENDENT of the app chrome theme. Default "dark" so CLIs
 // like Claude/Gemini/Codex (which assume a dark terminal) always render correctly even
@@ -17,6 +23,9 @@ interface SettingsPersist {
   termForeground?: string;
   /** Render terminal text at a heavier weight. */
   termBold?: boolean;
+  /** Custom keyboard chords, action -> chord. Only overrides are stored; an absent
+   *  action uses its default from the shortcut registry. */
+  shortcuts?: ShortcutOverrides;
 }
 
 interface SettingsState extends SettingsPersist {
@@ -27,6 +36,8 @@ interface SettingsState extends SettingsPersist {
   setDefaultCwd: (c: string) => void;
   setTermForeground: (c: string | undefined) => void;
   setTermBold: (b: boolean) => void;
+  setShortcut: (action: ShortcutAction, chord: string | undefined) => void;
+  resetShortcuts: () => void;
   hydrate: (data: Partial<SettingsPersist>) => void;
   serialize: () => SettingsPersist;
 }
@@ -39,11 +50,29 @@ const DEFAULTS: SettingsPersist = {
   defaultCwd: undefined,
   termForeground: undefined,
   termBold: false,
+  shortcuts: undefined,
 };
 
 const THEMES: readonly ThemeMode[] = ["dark", "light", "system"];
 const TERM_THEMES: readonly TerminalTheme[] = ["dark", "light", "match"];
 const SHELL_KINDS = ["powershell", "cmd", "wsl", "custom"] as const;
+
+/** Shortcut overrides from the blob: keep only known actions with valid chords, drop
+ *  duplicates (first action in registry order wins), and drop an override that just
+ *  restates the action's own default. Empty result collapses to undefined. */
+function sanitizeShortcuts(raw: unknown): ShortcutOverrides | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: ShortcutOverrides = {};
+  const taken = new Set<string>();
+  for (const def of SHORTCUT_DEFS) {
+    const v = src[def.action];
+    if (!isValidChord(v) || taken.has(v) || def.defaults[0] === v) continue;
+    out[def.action] = v;
+    taken.add(v);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 /** Boundary validation for the persisted blob: it is untrusted (hand-edited, corrupt,
  *  or from an older build). Every bad field falls back to its default instead of
@@ -71,7 +100,17 @@ function sanitize(data: Partial<SettingsPersist> | undefined): SettingsPersist {
   const termForeground =
     typeof d.termForeground === "string" && d.termForeground.trim() ? d.termForeground : undefined;
   const termBold = typeof d.termBold === "boolean" ? d.termBold : DEFAULTS.termBold;
-  return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold };
+  const shortcuts = sanitizeShortcuts(d.shortcuts);
+  return {
+    theme,
+    terminalTheme,
+    fontSize,
+    defaultShell,
+    defaultCwd,
+    termForeground,
+    termBold,
+    shortcuts,
+  };
 }
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -84,11 +123,37 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setTermForeground: (termForeground) =>
     set({ termForeground: termForeground && termForeground.trim() ? termForeground : undefined }),
   setTermBold: (termBold) => set({ termBold }),
+  setShortcut: (action, chord) =>
+    set((s) => {
+      const next: ShortcutOverrides = { ...(s.shortcuts ?? {}) };
+      const def = SHORTCUT_DEFS.find((d) => d.action === action);
+      if (!chord || !isValidChord(chord) || def?.defaults[0] === chord) delete next[action];
+      else next[action] = chord;
+      return { shortcuts: Object.keys(next).length ? next : undefined };
+    }),
+  resetShortcuts: () => set({ shortcuts: undefined }),
   hydrate: (data) => set(sanitize(data)),
   serialize: () => {
-    const { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold } =
-      get();
-    return { theme, terminalTheme, fontSize, defaultShell, defaultCwd, termForeground, termBold };
+    const {
+      theme,
+      terminalTheme,
+      fontSize,
+      defaultShell,
+      defaultCwd,
+      termForeground,
+      termBold,
+      shortcuts,
+    } = get();
+    return {
+      theme,
+      terminalTheme,
+      fontSize,
+      defaultShell,
+      defaultCwd,
+      termForeground,
+      termBold,
+      shortcuts,
+    };
   },
 }));
 

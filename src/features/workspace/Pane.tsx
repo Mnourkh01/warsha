@@ -1,15 +1,26 @@
-import { Eraser, FoldVertical, FolderInput, Maximize2, Minimize2, RadioTower, X } from "lucide-react";
-import { useWorkspaces } from "../../store/workspaces";
+import {
+  CopyPlus,
+  Eraser,
+  FoldVertical,
+  FolderInput,
+  Maximize2,
+  Minimize2,
+  RadioTower,
+  X,
+} from "lucide-react";
+import { MAX_PER_WS, useWorkspaces } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
 import { useUI } from "../../store/ui";
 import { TerminalView } from "../terminal/TerminalView";
 import { FindBar } from "../terminal/FindBar";
-import { changeSessionFolder, closeSession, openSession } from "../../actions";
+import { changeSessionFolder, closeSession, duplicateSession, openSession } from "../../actions";
 import { getTerminal } from "../terminal/controller";
 import { tintClasses } from "../../lib/tints";
 import { confirmDialog, pickFolder, ptyWrite } from "../../lib/ipc";
 import { AI_CONTEXT_COMMANDS } from "../../lib/sessionTypes";
 import { SessionIcon } from "../icons";
+import { primaryChord } from "../shortcuts/registry";
+import { useSettings } from "../../store/settings";
 import { useStrings } from "../../lib/i18n";
 
 export function Pane({ sessionId }: { sessionId: string }) {
@@ -20,12 +31,17 @@ export function Pane({ sessionId }: { sessionId: string }) {
     const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
     return (ws?.sessionIds.length ?? 0) <= 1;
   });
+  const wsFull = useWorkspaces((s) => s.isFull(s.workspaceOf(sessionId) ?? undefined));
   const status = useRuntime((s) => s.status[sessionId]);
+  // Live detection wins over the launch-time type (see SessionRow): the icon and the
+  // AI context buttons follow what actually runs in the shell right now.
+  const detectedAi = useRuntime((s) => s.detectedAi[sessionId]);
   const attention = useRuntime((s) => Boolean(s.attention[sessionId]));
   const maximized = useUI((s) => s.maximizedSessionId === sessionId);
   const findOpen = useUI((s) => s.findOpen && active);
   // The grid only renders the active workspace, so every visible pane broadcasts.
   const broadcast = useUI((s) => s.broadcast);
+  const shortcuts = useSettings((s) => s.shortcuts);
   const t = useStrings();
 
   if (!session) return null;
@@ -46,9 +62,10 @@ export function Pane({ sessionId }: { sessionId: string }) {
   // and only while the process runs. The command is TYPED into the session (plus
   // Enter); if the CLI died back to the shell, a stray "/clear" is a harmless
   // unknown-command error - nothing here executes real shell logic.
+  const effectiveTypeId = detectedAi ?? session.typeId;
   const aiCmd =
-    session.typeId && session.typeId in AI_CONTEXT_COMMANDS
-      ? AI_CONTEXT_COMMANDS[session.typeId as keyof typeof AI_CONTEXT_COMMANDS]
+    effectiveTypeId && effectiveTypeId in AI_CONTEXT_COMMANDS
+      ? AI_CONTEXT_COMMANDS[effectiveTypeId as keyof typeof AI_CONTEXT_COMMANDS]
       : undefined;
   const typeAiCommand = async (command: string, confirmText?: string) => {
     if (confirmText && !(await confirmDialog(confirmText).catch(() => false))) return;
@@ -66,7 +83,7 @@ export function Pane({ sessionId }: { sessionId: string }) {
       onMouseDown={() => openSession(sessionId)}
     >
       <div className="pane-header">
-        <SessionIcon typeId={session.typeId} size={18} />
+        <SessionIcon typeId={effectiveTypeId} size={18} />
         <span
           className={`status-dot ${status ?? "idle"}`}
           role="img"
@@ -75,7 +92,11 @@ export function Pane({ sessionId }: { sessionId: string }) {
         />
         <span className="pane-title bidi-auto">{session.name}</span>
         {broadcast && (
-          <span className="broadcast-chip" role="status" title={t.broadcastChipTitle}>
+          <span
+            className="broadcast-chip"
+            role="status"
+            title={t.broadcastChipTitle(primaryChord("broadcast", shortcuts ?? {}))}
+          >
             <RadioTower size={11} />
             {t.broadcastChip}
           </span>
@@ -126,10 +147,26 @@ export function Pane({ sessionId }: { sessionId: string }) {
           >
             <FolderInput size={14} />
           </button>
+          <button
+            className="icon-btn sm"
+            title={wsFull ? t.workspaceFull(MAX_PER_WS) : t.duplicateSession}
+            aria-label={t.duplicateNamed(session.name)}
+            disabled={wsFull}
+            onClick={(e) => {
+              e.stopPropagation();
+              duplicateSession(sessionId);
+            }}
+          >
+            <CopyPlus size={14} />
+          </button>
           {!solo && (
             <button
               className="icon-btn sm"
-              title={maximized ? t.restorePane : t.maximizePane}
+              title={
+                maximized
+                  ? t.restorePane(primaryChord("maximize", shortcuts ?? {}))
+                  : t.maximizePane(primaryChord("maximize", shortcuts ?? {}))
+              }
               aria-label={maximized ? t.restoreNamed(session.name) : t.maximizeNamed(session.name)}
               onClick={(e) => {
                 e.stopPropagation();

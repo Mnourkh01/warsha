@@ -70,6 +70,39 @@ export function newSession(spec: {
   return id;
 }
 
+/** "planner" -> "planner 2", counting up past taken sibling names; a name that
+ *  already ends in a number ("planner 2" -> "planner 3") reuses its base. */
+function duplicateName(name: string, taken: Set<string>): string {
+  const base = name.replace(/ \d+$/, "");
+  let n = 2;
+  while (taken.has(`${base} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
+
+/** Clone a session into its own workspace: same shell (incl. an AI CLI launch), same
+ *  folder, same type; numbered name. The clone starts a FRESH shell - a live PTY's
+ *  history and state cannot be copied. Returns the new id, null if the workspace is
+ *  full or the source is gone. */
+export function duplicateSession(id: string): string | null {
+  const ws = useWorkspaces.getState();
+  const src = ws.sessions[id];
+  if (!src) return null;
+  const wsId = ws.workspaceOf(id);
+  const siblings = ws.workspaces.find((w) => w.id === wsId)?.sessionIds ?? [];
+  const taken = new Set(
+    siblings.map((sid) => ws.sessions[sid]?.name).filter((n): n is string => Boolean(n)),
+  );
+  const newId = newSession({
+    shell: src.shell,
+    cwd: src.cwd,
+    typeId: src.typeId,
+    workspaceId: wsId ?? undefined,
+    name: duplicateName(src.name, taken),
+  });
+  if (newId) openSession(newId);
+  return newId;
+}
+
 /** Focus a session, switching to its workspace if needed. */
 export function openSession(id: string): void {
   const ui = useUI.getState();

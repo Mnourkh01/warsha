@@ -28,3 +28,6 @@ tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 which = "7"
+# Process table for the Radar feature (pids, parents, command lines). Default
+# features off: only process enumeration is needed, not disks/networks/components.
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }

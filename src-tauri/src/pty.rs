@@ -309,6 +309,16 @@ impl PtyManager {
         Ok(())
     }
 
+    /// Live (session id, shell pid) pairs - the roots the Radar feature walks to
+    /// attribute processes and ports to sessions.
+    pub fn session_pids(&self) -> Vec<(String, u32)> {
+        self.sessions
+            .lock()
+            .iter()
+            .filter_map(|(id, s)| s.child_pid.map(|pid| (id.clone(), pid)))
+            .collect()
+    }
+
     /// Kill every live session. Called on app exit so no ConPTY children leak.
     pub fn kill_all(&self) {
         let drained: Vec<(String, PtySession)> = {

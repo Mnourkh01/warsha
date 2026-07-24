@@ -55,6 +55,13 @@ never enters the repo; losing it means shipping a new public key before updates 
 - **Naming:** files/folders kebab or Rust-idiomatic; a stranger navigates from names alone.
 - **No em-dash / en-dash in any user-visible copy** (labels, tooltips, errors, menus).
   ASCII hyphen, comma, or period instead.
+- **Tailwind v4 is globally imported** (`@import "tailwindcss"` in global.css): never name
+  a custom class after a Tailwind utility (`fixed`, `block`, `hidden`, `container`, ...).
+  A `.fixed` modifier once got `position: fixed` and exploded a dialog. Prefix instead
+  (e.g. `sc-fixed`).
+- **Keyboard shortcuts**: rebindable chords live ONLY in `src/features/shortcuts/registry.ts`
+  (defaults, validation, matching). Never hardcode a chord string in a component or i18n;
+  tooltips and hints take the live chord via `primaryChord()`.
 - **Motion:** subtle, functional only (this is a devtool/dashboard surface, NOT a marketing
   page). No GSAP hero scenes, no Three.js/3D. Honor `prefers-reduced-motion`.
 - **Theme:** dark-first is legitimate for a terminal tool, but ship a real light theme too;

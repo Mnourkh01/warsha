@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   BookmarkPlus,
   ChevronDown,
+  CopyPlus,
   FolderOpen,
   FolderPlus,
   Layers,
@@ -24,6 +25,7 @@ import { confirmDialog, pickFolder } from "../../lib/ipc";
 import {
   closeSession,
   deleteWorkspace,
+  duplicateSession,
   newWorkspace,
   openPlanner,
   openSession,
@@ -32,6 +34,8 @@ import {
   switchWorkspace,
 } from "../../actions";
 import { SessionIcon } from "../icons";
+import { primaryChord } from "../shortcuts/registry";
+import { useSettings } from "../../store/settings";
 import { useStrings } from "../../lib/i18n";
 
 const DND = "text/warsha-session";
@@ -61,6 +65,7 @@ export function SessionTree() {
   const workspaces = useWorkspaces((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
   const activeSessionId = useWorkspaces((s) => s.activeSessionId);
+  const shortcuts = useSettings((s) => s.shortcuts);
   const setNewSession = useUI((s) => s.setNewSession);
   const sidebarWidth = useUI((s) => s.sidebarWidth);
   const t = useStrings();
@@ -98,7 +103,7 @@ export function SessionTree() {
           />
         ))}
         {workspaces.every((w) => w.sessionIds.length === 0) && (
-          <div className="tree-empty">{t.treeEmpty}</div>
+          <div className="tree-empty">{t.treeEmpty(primaryChord("palette", shortcuts ?? {}))}</div>
         )}
         <TemplatesSection />
       </div>
@@ -384,8 +389,12 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
   const session = useWorkspaces((s) => s.sessions[id]);
   const reorder = useWorkspaces((s) => s.reorderSession);
   const renameSession = useWorkspaces((s) => s.renameSession);
+  const wsFull = useWorkspaces((s) => s.isFull(s.workspaceOf(id) ?? undefined));
   const status = useRuntime((s) => s.status[id]);
   const attention = useRuntime((s) => Boolean(s.attention[id]));
+  // Live detection wins over the launch-time type: typing `claude` into a plain shell
+  // flips the icon; the CLI exiting flips it back (typeId is the fallback).
+  const detectedAi = useRuntime((s) => s.detectedAi[id]);
   const t = useStrings();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -445,7 +454,7 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
       title={session.name}
     >
       <span className="row-badge" data-status={status ?? "idle"}>
-        <SessionIcon typeId={session.typeId} size={16} />
+        <SessionIcon typeId={detectedAi ?? session.typeId} size={16} />
         <span
           className="row-presence"
           role="img"
@@ -496,6 +505,15 @@ function SessionRow({ id, active }: { id: string; active: boolean }) {
             onClick={() => useWorkspaces.getState().setSessionTint(id, nextTint(session.tint))}
           >
             <PaintBucket size={13} />
+          </button>
+          <button
+            className="icon-btn sm"
+            title={wsFull ? t.workspaceFull(MAX_PER_WS) : t.duplicateSession}
+            aria-label={t.duplicateNamed(session.name)}
+            disabled={wsFull}
+            onClick={() => duplicateSession(id)}
+          >
+            <CopyPlus size={13} />
           </button>
           <button
             className="icon-btn sm"

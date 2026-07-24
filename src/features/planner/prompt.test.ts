@@ -57,4 +57,11 @@ describe("buildDraftRequestPrompt", () => {
     expect(out).toContain(".warsha/plan.draft.json");
     expect(out).toContain("risks as risk notes");
   });
+
+  it("asks for a system model of the product, not a task list", () => {
+    const out = buildDraftRequestPrompt({ cwd: "C:\\dev\\x" });
+    expect(out).toContain("Model the product as a working system first");
+    expect(out).toContain("screen -> api -> service -> data");
+    expect(out).toContain("task blocks only for work that is not a system part");
+  });
 });

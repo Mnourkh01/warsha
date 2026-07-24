@@ -22,14 +22,23 @@ Set every "x" and "y" to 0 - Warsha lays the blocks out automatically.
 {
   "nodes": [
     { "id": "p1", "kind": "phase", "label": "Phase 1 - Core", "x": 0, "y": 0,
-      "acceptance": ["API deployed", "Login works end to end"] },
-    { "id": "t1", "kind": "task", "label": "Build login form", "phaseId": "p1",
-      "x": 0, "y": 0, "acceptance": ["Rejects bad email"], "effort": "m",
-      "priority": "must" },
+      "acceptance": ["Login works end to end"] },
+    { "id": "s1", "kind": "screen", "label": "Login", "path": "/login", "phaseId": "p1",
+      "x": 0, "y": 0, "acceptance": ["error state", "loading state"] },
+    { "id": "a1", "kind": "api", "label": "POST /api/login", "method": "POST",
+      "path": "/api/login", "auth": "public", "phaseId": "p1", "x": 0, "y": 0 },
+    { "id": "sv1", "kind": "service", "label": "AuthService", "spec": "Laravel Sanctum",
+      "phaseId": "p1", "x": 0, "y": 0 },
+    { "id": "d1", "kind": "data", "label": "users", "spec": "id", "phaseId": "p1",
+      "x": 0, "y": 0, "fields": [{ "name": "email", "type": "string" }] },
     { "id": "n1", "kind": "note", "label": "Rate limits unknown", "flavor": "risk",
       "x": 0, "y": 0, "description": "Verify provider limits before phase 2." }
   ],
-  "edges": [ { "id": "e1", "source": "t1", "target": "n1" } ]
+  "edges": [
+    { "id": "e1", "source": "s1", "target": "a1", "kind": "calls" },
+    { "id": "e2", "source": "a1", "target": "sv1", "kind": "calls" },
+    { "id": "e3", "source": "sv1", "target": "d1", "kind": "calls" }
+  ]
 }
 \`\`\`
 
@@ -71,9 +80,17 @@ chars - 40 data fields.
 
 ## What a good plan looks like
 
-- 2 to 4 phases, each with 2+ concrete exit criteria; blocks join a phase via phaseId.
-- Every risky or unknown step gets a note with flavor "risk" or "question".
+- The plan is a MODEL OF THE PRODUCT, not a work log. Lead with system blocks:
+  every screen the user touches, every api endpoint, the services behind them,
+  the data models they read and write, integrations, and ai/agent blocks where a
+  model runs - wired with calls/tool arrows so a reader can follow one user
+  action end to end (screen -> api -> service -> data).
+- task blocks only for work that is not a system part (setup, docs, migration,
+  research). "Build login form" is wrong when a screen "Login" says it better.
+- 2 to 4 phases group delivery order via phaseId, each with 2+ concrete exit criteria.
+- Every risky or unknown area gets a note with flavor "risk" or "question" wired
+  near the blocks it threatens.
 - A gate before anything irreversible (deploy, payment, data migration).
-- Tests cover the main flows; deploy blocks carry a rollback plan in spec.
+- Tests cover the main flows via covers arrows; deploy blocks carry a rollback plan in spec.
 - One idea per block.
 `;

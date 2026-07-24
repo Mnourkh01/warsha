@@ -18,11 +18,12 @@ const en = {
   toggleTheme: "Toggle theme",
   toggleThemeAria: "Toggle light or dark theme",
   settings: "Settings",
-  hideSidebar: "Hide sidebar (Ctrl+Shift+B)",
+  hideSidebar: (chord: string) => (chord ? `Hide sidebar (${chord})` : "Hide sidebar"),
   hideSidebarAria: "Hide sidebar",
-  showSidebar: "Show sidebar (Ctrl+Shift+B)",
+  showSidebar: (chord: string) => (chord ? `Show sidebar (${chord})` : "Show sidebar"),
   showSidebarAria: "Show sidebar",
-  treeEmpty: "No sessions yet. Press the + button above, or Ctrl K, to open your first terminal.",
+  treeEmpty: (chord: string) =>
+    `No sessions yet. Press the + button above${chord ? `, or ${chord},` : ""} to open your first terminal.`,
 
   // workspace rows
   expandWorkspace: "Expand workspace",
@@ -74,6 +75,8 @@ const en = {
   closeNamed: (name: string) => `Close ${name}`,
   changeColor: "Change color",
   changeColorNamed: (name: string) => `Change color for ${name}`,
+  duplicateSession: "Duplicate (same shell and folder, fresh start)",
+  duplicateNamed: (name: string) => `Duplicate ${name}`,
   changeFolder: "Change folder (no restart)",
   changeFolderNamed: (name: string) => `Change folder for ${name}`,
   changeFolderTitle: (name: string) => `Choose a new folder for ${name}`,
@@ -82,8 +85,8 @@ const en = {
   statusIdle: "Not started",
   needsAttention: "Needs attention",
   attentionHint: "Finished or waiting for input",
-  maximizePane: "Maximize pane (Ctrl+Shift+M)",
-  restorePane: "Restore pane (Ctrl+Shift+M)",
+  maximizePane: (chord: string) => (chord ? `Maximize pane (${chord})` : "Maximize pane"),
+  restorePane: (chord: string) => (chord ? `Restore pane (${chord})` : "Restore pane"),
   maximizeNamed: (name: string) => `Maximize ${name}`,
   restoreNamed: (name: string) => `Restore ${name}`,
 
@@ -185,8 +188,8 @@ const en = {
 
   // broadcast input
   broadcastChip: "ALL",
-  broadcastChipTitle:
-    "Broadcast is on: typing goes to every session in this workspace. Ctrl+Shift+I turns it off.",
+  broadcastChipTitle: (chord: string) =>
+    `Broadcast is on: typing goes to every session in this workspace.${chord ? ` ${chord} turns it off.` : ""}`,
   cmdBroadcastOn: "Broadcast typing: send input to all sessions here",
   cmdBroadcastOff: "Broadcast typing: turn off",
   scBroadcast: "Broadcast typing to all sessions in the workspace",
@@ -211,9 +214,28 @@ const en = {
   planProject: "Plan this project",
   openPlanner: "Open Blueprint",
   openPlannerFor: (name: string) => `Open the Blueprint for ${name}`,
+  openBlueprintTb: (ws: string, chord: string) =>
+    chord ? `Open Blueprint for ${ws} (${chord})` : `Open Blueprint for ${ws}`,
+  closeBlueprintTb: (ws: string, chord: string) =>
+    chord ? `Close Blueprint for ${ws} (${chord})` : `Close Blueprint for ${ws}`,
+  openBlueprintAria: (ws: string) => `Open the Blueprint for ${ws}`,
+  closeBlueprintAria: (ws: string) => `Close the Blueprint for ${ws}`,
   closePlanner: "Back to terminals",
   planName: "Blueprint name",
   planNodeCount: (n: number) => `${n} block${n === 1 ? "" : "s"}`,
+  planWsChipTitle: (path: string) => `Plan of this workspace. AI CLIs read it in ${path}`,
+  planWsChipNoFolder:
+    "Plan of this workspace. No project folder is set, so AI CLIs cannot read it.",
+  planMirrorCollision: (others: string) =>
+    `Another workspace (${others}) writes its plan to this same folder. ` +
+    `The plans overwrite each other in .warsha/plan.md. Give each workspace its own folder.`,
+  planSessionsOffMirror: (n: number) =>
+    n === 1
+      ? "1 session in this workspace runs in a different folder. An AI CLI there will not see this plan."
+      : `${n} sessions in this workspace run in different folders. AI CLIs there will not see this plan.`,
+  planNoMirrorFolder:
+    "This workspace has no project folder, so the plan is not shared with AI CLIs. " +
+    "Set a folder on the workspace row in the sidebar.",
   paletteBlocks: "Blocks",
   paletteHint: "Drag a block onto the canvas, or click it to add.",
   planEmptyHint: "This blueprint is empty. Drag a block from the left rail to start.",
@@ -372,8 +394,10 @@ const en = {
   cmdClosePlanner: "Close the Blueprint",
   cmdSendPlan: "Send plan to an AI CLI",
   scPlanner: "Toggle the project Blueprint",
-  scCycleSessions: "Next / previous session",
-  scCycleWorkspaces: "Next / previous workspace",
+  scWorkspaceNext: "Next workspace",
+  scWorkspacePrev: "Previous workspace",
+  scSessionNext: "Next session",
+  scSessionPrev: "Previous session",
   aiClearTitle: (cmd: string) => `Clear AI chat (types ${cmd})`,
   aiCompactTitle: (cmd: string) => `Compact AI chat (types ${cmd})`,
   aiClearConfirm: (name: string) =>
@@ -432,6 +456,37 @@ const en = {
   simStatusRisky: "Risky step",
   simStatusBlocked: "Blocked step",
 
+  // radar (what is running right now)
+  radarTitle: "Radar",
+  radarButton: (n: number) => (n > 0 ? `Radar: ${n} things running` : "Radar"),
+  radarSubtitle: "What your sessions started, and what is still running.",
+  closeRadar: "Close Radar",
+  radarRefresh: "Refresh now",
+  radarPortsHeader: "Local servers",
+  radarPort: (port: number) => `localhost:${port}`,
+  radarDockerHeader: "Docker containers",
+  radarMcpHeader: "MCP servers",
+  radarProcsHeader: "Processes",
+  radarOutsideHeader: "Not from any session",
+  radarClosedSession: "Closed session",
+  radarSummaryServers: (n: number) => (n === 1 ? "1 server" : `${n} servers`),
+  radarSummaryMcp: (n: number) => `${n} MCP`,
+  radarSummaryProcs: (n: number) => (n === 1 ? "1 process" : `${n} processes`),
+  radarSummaryItems: (n: number) => (n === 1 ? "1 item" : `${n} items`),
+  radarSummaryContainers: (n: number) => (n === 1 ? "1 container" : `${n} containers`),
+  radarStop: "Stop",
+  radarStopTree: (name: string) => `Stop ${name} and everything under it`,
+  radarStopArmed: "Sure? Click again",
+  radarStopFailed: (reason: string) => `Could not stop it: ${reason}`,
+  radarDockerStop: (name: string) => `Stop container ${name}`,
+  radarDockerOff: "Docker is installed but the engine is not running.",
+  radarDockerError: "Docker did not answer. It may be starting up.",
+  radarEmpty: "All clear. Nothing extra is running.",
+  radarLoading: "Looking around...",
+  radarPid: (pid: number) => `PID ${pid}`,
+  radarRunningSince: (when: string) => `Running since ${when}`,
+  cmdRadar: "Open Radar (running servers, docker, MCP)",
+
   // shortcuts dialog
   keyboardShortcuts: "Keyboard shortcuts",
   closeShortcuts: "Close shortcuts",
@@ -443,6 +498,21 @@ const en = {
   scPaste: "Paste into the terminal",
   scEscape: "Close the topmost dialog or the find bar",
   scSigint: "Stays SIGINT for the shell (not copy)",
+
+  // settings dialog
+  settingsTabAppearance: "Appearance",
+  settingsTabTerminal: "Terminal",
+  settingsTabShortcuts: "Shortcuts",
+  settingsTabUpdates: "Updates",
+  shortcutsIntro: "Click a shortcut to change it. A shortcut needs Ctrl or Alt.",
+  shortcutRecording: "Press keys...",
+  shortcutChangeTitle: (label: string) => `Change shortcut for "${label}"`,
+  shortcutResetOne: "Reset to default",
+  shortcutsResetAll: "Reset all shortcuts",
+  shortcutConflict: (label: string) => `Already used by "${label}". Pick another.`,
+  shortcutNeedCtrlAlt: "Add Ctrl or Alt to the shortcut.",
+  shortcutFixedHeader: "Fixed keys",
+  shortcutFixedHint: "These keep the terminal usable and cannot be changed.",
 };
 
 export type Strings = typeof en;

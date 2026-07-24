@@ -32,6 +32,9 @@ interface PersistBlob {
     defaultCwd?: string;
     termForeground?: string;
     termBold?: boolean;
+    /** Added 2026-07-24 (configurable shortcuts), same VERSION: optional-field pattern,
+     *  absent hydrates to defaults, older builds ignore it. */
+    shortcuts?: Record<string, string>;
   };
   /** Added 2026-07-24, same VERSION: an absent field hydrates to an empty list, and an
    *  older build reading a newer blob simply ignores it - no migration needed. */

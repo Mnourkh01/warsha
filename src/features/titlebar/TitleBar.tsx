@@ -5,13 +5,17 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Radar,
   Settings,
   Square,
   Sun,
+  Workflow,
   X,
 } from "lucide-react";
 import { useSettings } from "../../store/settings";
 import { useUI } from "../../store/ui";
+import { useWorkspaces } from "../../store/workspaces";
+import { useRadar, liveCount } from "../../store/radar";
 import { resolveTheme } from "../../lib/theme";
 import {
   closeAppWindow,
@@ -21,6 +25,7 @@ import {
   toggleMaximizeAppWindow,
 } from "../../lib/ipc";
 import { WarshaMark } from "../icons";
+import { primaryChord } from "../shortcuts/registry";
 import { useStrings } from "../../lib/i18n";
 
 /** Frameless-window title bar: drag region, brand, sidebar/theme/settings toggles and
@@ -29,11 +34,21 @@ import { useStrings } from "../../lib/i18n";
  *  handler only fires when the bar itself is the event target. */
 export function TitleBar() {
   const sidebarOpen = useUI((s) => s.sidebarOpen);
+  const plannerOpen = useUI((s) => s.plannerOpen);
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
+  const shortcuts = useSettings((s) => s.shortcuts);
+  const sidebarChord = primaryChord("sidebar", shortcuts ?? {});
+  const blueprintChord = primaryChord("blueprint", shortcuts ?? {});
   const resolved = resolveTheme(theme);
   const t = useStrings();
   const [maximized, setMaximized] = useState(false);
+  const radarCount = useRadar((s) => liveCount(s.snapshot));
+  // The Blueprint always opens the ACTIVE workspace's plan; say which one up front
+  // so the global button placement stays unambiguous.
+  const wsName = useWorkspaces(
+    (s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId)?.name ?? "this workspace",
+  );
 
   // Keep the maximize/restore glyph truthful across every path that resizes the
   // window (button, double-click, Win+Arrow snapping, window-state restore).
@@ -66,7 +81,7 @@ export function TitleBar() {
     <header className="titlebar" data-tauri-drag-region>
       <button
         className="icon-btn"
-        title={sidebarOpen ? t.hideSidebar : t.showSidebar}
+        title={sidebarOpen ? t.hideSidebar(sidebarChord) : t.showSidebar(sidebarChord)}
         aria-label={sidebarOpen ? t.hideSidebarAria : t.showSidebarAria}
         onClick={() => useUI.getState().toggleSidebar()}
       >
@@ -79,6 +94,30 @@ export function TitleBar() {
         Warsha
       </span>
       <span className="spacer" data-tauri-drag-region />
+      <button
+        className="icon-btn"
+        title={
+          plannerOpen
+            ? t.closeBlueprintTb(wsName, blueprintChord)
+            : t.openBlueprintTb(wsName, blueprintChord)
+        }
+        aria-label={plannerOpen ? t.closeBlueprintAria(wsName) : t.openBlueprintAria(wsName)}
+        aria-pressed={plannerOpen}
+        onClick={() => useUI.getState().togglePlanner()}
+      >
+        <Workflow size={16} />
+      </button>
+      <button
+        className="icon-btn radar-btn"
+        title={t.radarButton(radarCount)}
+        aria-label={t.radarButton(radarCount)}
+        onClick={() => useUI.getState().setRadar(true)}
+      >
+        <Radar size={16} />
+        {radarCount > 0 && (
+          <span className="radar-badge">{radarCount > 99 ? "99+" : radarCount}</span>
+        )}
+      </button>
       <button
         className="icon-btn"
         title={t.toggleTheme}

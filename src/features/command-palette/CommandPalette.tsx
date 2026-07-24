@@ -8,6 +8,7 @@ import {
   Palette,
   PanelLeft,
   Plus,
+  Radar,
   RadioTower,
   RotateCw,
   Search,
@@ -34,6 +35,7 @@ import {
 } from "../../actions";
 import { DialogTrap } from "../../lib/dialog-trap";
 import { SessionIcon } from "../icons";
+import { primaryChord } from "../shortcuts/registry";
 import { useStrings } from "../../lib/i18n";
 
 interface Command {
@@ -57,6 +59,7 @@ export function CommandPalette() {
   const planNodeCount = usePlans((s) => s.plans[activeWorkspaceId]?.nodes.length ?? 0);
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
+  const shortcuts = useSettings((s) => s.shortcuts);
   const setSettings = useUI((s) => s.setSettings);
   const t = useStrings();
 
@@ -130,7 +133,7 @@ export function CommandPalette() {
         id: "maximize-pane",
         label: t.cmdMaximize,
         icon: <Maximize2 size={15} />,
-        hint: "Ctrl+Shift+M",
+        hint: primaryChord("maximize", shortcuts ?? {}),
         run: () => {
           if (activeSessionId) useUI.getState().toggleMaximized(activeSessionId);
         },
@@ -139,7 +142,7 @@ export function CommandPalette() {
         id: "find-terminal",
         label: t.findInTerminal,
         icon: <Search size={15} />,
-        hint: "Ctrl+Shift+F",
+        hint: primaryChord("find", shortcuts ?? {}),
         run: () => {
           if (activeSessionId) useUI.getState().setFind(true);
         },
@@ -160,14 +163,14 @@ export function CommandPalette() {
         id: "toggle-broadcast",
         label: broadcast ? t.cmdBroadcastOff : t.cmdBroadcastOn,
         icon: <RadioTower size={15} />,
-        hint: "Ctrl+Shift+I",
+        hint: primaryChord("broadcast", shortcuts ?? {}),
         run: () => useUI.getState().toggleBroadcast(),
       },
       {
         id: "toggle-planner",
         label: plannerOpen ? t.cmdClosePlanner : t.cmdOpenPlanner,
         icon: <Workflow size={15} />,
-        hint: "Ctrl+Shift+D",
+        hint: primaryChord("blueprint", shortcuts ?? {}),
         run: () => useUI.getState().togglePlanner(),
       },
       ...(planNodeCount > 0
@@ -187,7 +190,7 @@ export function CommandPalette() {
         id: "toggle-sidebar",
         label: t.cmdToggleSidebar,
         icon: <PanelLeft size={15} />,
-        hint: "Ctrl+Shift+B",
+        hint: primaryChord("sidebar", shortcuts ?? {}),
         run: () => useUI.getState().toggleSidebar(),
       },
       {
@@ -201,6 +204,12 @@ export function CommandPalette() {
         label: t.cmdToggleTheme,
         icon: <Palette size={15} />,
         run: () => setTheme(resolveTheme(theme) === "dark" ? "light" : "dark"),
+      },
+      {
+        id: "radar",
+        label: t.cmdRadar,
+        icon: <Radar size={15} />,
+        run: () => useUI.getState().setRadar(true),
       },
       {
         id: "settings",
@@ -235,7 +244,7 @@ export function CommandPalette() {
     }));
 
     return [...base, ...wsCmds, ...tplCmds, ...openers];
-  }, [workspaces, sessions, templates, broadcast, plannerOpen, planNodeCount, activeSessionId, theme, setTheme, setSettings, t]);
+  }, [workspaces, sessions, templates, broadcast, plannerOpen, planNodeCount, activeSessionId, theme, setTheme, setSettings, shortcuts, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

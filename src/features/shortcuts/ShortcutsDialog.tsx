@@ -1,18 +1,13 @@
 import { useRef } from "react";
 import { X } from "lucide-react";
 import { useUI } from "../../store/ui";
+import { useSettings } from "../../store/settings";
 import { DialogTrap } from "../../lib/dialog-trap";
 import { useStrings, type Strings } from "../../lib/i18n";
+import { SHORTCUT_DEFS, effectiveChords } from "./registry";
 
-const SHORTCUTS: { chord: string; action: (t: Strings) => string }[] = [
-  { chord: "Ctrl+K / Ctrl+Shift+P", action: (t) => t.scPalette },
-  { chord: "Ctrl+Shift+B", action: (t) => t.scSidebar },
-  { chord: "Ctrl+Shift+F", action: (t) => t.scFind },
-  { chord: "Ctrl+Shift+M", action: (t) => t.scMaximize },
-  { chord: "Ctrl+Shift+I", action: (t) => t.scBroadcast },
-  { chord: "Ctrl+Shift+D", action: (t) => t.scPlanner },
-  { chord: "Ctrl+PageDown / Ctrl+PageUp", action: (t) => t.scCycleSessions },
-  { chord: "Ctrl+Shift+PageDown / Ctrl+Shift+PageUp", action: (t) => t.scCycleWorkspaces },
+// Terminal-contract chords, not rebindable; shown after the registry actions.
+const FIXED: { chord: string; action: (t: Strings) => string }[] = [
   { chord: "Ctrl+Shift+C", action: (t) => t.scCopy },
   { chord: "Ctrl+V / Ctrl+Shift+V", action: (t) => t.scPaste },
   { chord: "Escape", action: (t) => t.scEscape },
@@ -22,10 +17,20 @@ const SHORTCUTS: { chord: string; action: (t: Strings) => string }[] = [
 export function ShortcutsDialog() {
   const open = useUI((s) => s.shortcutsOpen);
   const setShortcuts = useUI((s) => s.setShortcuts);
+  const overrides = useSettings((s) => s.shortcuts);
   const boxRef = useRef<HTMLDivElement>(null);
   const t = useStrings();
 
   if (!open) return null;
+
+  const effective = effectiveChords(overrides ?? {});
+  const rows = [
+    ...SHORTCUT_DEFS.map((def) => ({
+      chord: (effective.get(def.action) ?? []).join(" / ") || "-",
+      label: def.label(t),
+    })),
+    ...FIXED.map((f) => ({ chord: f.chord, label: f.action(t) })),
+  ];
 
   return (
     <div
@@ -57,12 +62,12 @@ export function ShortcutsDialog() {
         <div className="dialog-body">
           <table className="shortcut-table">
             <tbody>
-              {SHORTCUTS.map((s) => (
-                <tr key={s.chord}>
+              {rows.map((r) => (
+                <tr key={r.label}>
                   <td className="shortcut-chord">
-                    <kbd>{s.chord}</kbd>
+                    <kbd>{r.chord}</kbd>
                   </td>
-                  <td>{s.action(t)}</td>
+                  <td>{r.label}</td>
                 </tr>
               ))}
             </tbody>

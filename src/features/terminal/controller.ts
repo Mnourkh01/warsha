@@ -44,6 +44,21 @@ export interface TerminalOpts {
 const MAX_WEBGL = 8;
 let webglCount = 0;
 
+// Every terminal must get a PRIVATE glyph atlas. The webgl addon shares one texture
+// atlas between terminals whose render config matches (CharAtlasCache.configEquals),
+// and that sharing is broken upstream (xterm.js #6014/#6038): the shared
+// "rebuild your model" flag is consumed by whichever pane renders first, so after an
+// atlas page merge or clear the OTHER pane keeps vertex data pointing into pages that
+// no longer exist - its rows draw blank/garbled, and refresh() cannot heal it because
+// the per-cell model cache short-circuits unchanged cells. Symptom: switch workspaces
+// with two busy panes and most of the buffer goes invisible; only newly written cells
+// render. Appending a unique never-matching family name breaks configEquals so each
+// terminal owns its atlas; the name never affects rendering because the generic
+// `monospace` before it always resolves first. Remove once the upstream fix ships.
+const BASE_FONT_FAMILY =
+  '"IBM Plex Mono", ui-monospace, "Cascadia Code", "Courier New", monospace';
+let atlasSeq = 0;
+
 class TerminalController {
   readonly sessionId: string;
   readonly el: HTMLDivElement;
@@ -85,8 +100,9 @@ class TerminalController {
       allowProposedApi: true,
       // "Courier New" is the deterministic fallback for Arabic Presentation Forms
       // (U+FE70-FEFF, produced by shapeArabicVisual): it ships with Windows, includes the
-      // full range, and stays metric-stable inside the monospace grid.
-      fontFamily: '"IBM Plex Mono", ui-monospace, "Cascadia Code", "Courier New", monospace',
+      // full range, and stays metric-stable inside the monospace grid. The trailing
+      // "warsha-atlas-N" is the private-atlas key, see BASE_FONT_FAMILY.
+      fontFamily: `${BASE_FONT_FAMILY}, "warsha-atlas-${++atlasSeq}"`,
       fontSize: opts.fontSize,
       fontWeight: opts.bold ? 600 : 400,
       fontWeightBold: opts.bold ? 700 : 700,
@@ -293,6 +309,13 @@ class TerminalController {
     if (this.disposed || !this.opened || !this.el.isConnected) return;
     this.fitAndMaybeSpawn();
     this.tryWebgl();
+    // The GPU can silently wipe texture memory across minimize/restore or a display
+    // switch WITHOUT firing webglcontextlost (documented on clearTextureAtlas itself:
+    // Chromium/Nvidia resume-from-sleep). The atlas cache then still reports every
+    // glyph as rasterized while the texture is empty, so old rows draw transparent and
+    // only new output shows. The atlas is private to this terminal (BASE_FONT_FAMILY
+    // key), so clearing it is safe and re-rasterizes everything on the repaint below.
+    this.term.clearTextureAtlas();
     this.refresh();
   }
 
