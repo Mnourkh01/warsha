@@ -43,8 +43,56 @@ const MAX_DUE = 40;
 const MAX_LINK = 300;
 
 /** Kinds whose list field is meaningful (acceptance / options / checks / tools /
- *  exit criteria / screen states). */
-export const LIST_KINDS = ["task", "decision", "test", "agent", "phase", "screen"] as const;
+ *  exit criteria / screen states / gate pass criteria). */
+export const LIST_KINDS = ["task", "decision", "test", "agent", "phase", "screen", "gate"] as const;
+
+// Per-kind field matrix. Every block always has label, description, color and phase;
+// everything else belongs only to the kinds where it answers a real planning question.
+/** Kinds that track progress. A note is commentary; a decision's progress is `chosen`. */
+export const STATUS_KINDS = [
+  "phase",
+  "task",
+  "screen",
+  "api",
+  "service",
+  "ai",
+  "agent",
+  "data",
+  "integration",
+  "test",
+  "gate",
+  "deploy",
+] as const;
+/** Kinds sized S/M/L: buildable work. Gates, deploys and decisions are moments, not work. */
+export const EFFORT_KINDS = [
+  "task",
+  "screen",
+  "api",
+  "service",
+  "ai",
+  "agent",
+  "data",
+  "integration",
+  "test",
+] as const;
+/** Kinds ranked MoSCoW: scopeable features. Pipeline steps (test/gate/deploy) are not scoped. */
+export const PRIORITY_KINDS = [
+  "task",
+  "screen",
+  "api",
+  "service",
+  "ai",
+  "agent",
+  "data",
+  "integration",
+] as const;
+/** Kinds with a person attached: task (who does it), gate (who approves). */
+export const OWNER_KINDS = ["task", "gate"] as const;
+/** Kinds with a date: task deadline, phase target, decision deadline, deploy launch. */
+export const DUE_KINDS = ["task", "phase", "decision", "deploy"] as const;
+/** Kinds where a reference URL is part of the definition: screen (design mock),
+ *  integration (provider docs). Everywhere else a URL lives in the description. */
+export const LINK_KINDS = ["screen", "integration"] as const;
 /** Kinds that carry a path-like field (URL path / screen route). */
 export const PATH_KINDS = ["api", "screen"] as const;
 /** Kinds that carry a model name (AI step, agent). */
@@ -204,19 +252,33 @@ export function sanitizePlanNode(raw: unknown): PlanNode | null {
     phaseId:
       kind !== "phase" && typeof r.phaseId === "string" && r.phaseId ? r.phaseId : undefined,
   };
-  node.status = (PLAN_STATUSES as readonly string[]).includes(r.status as string)
-    ? (r.status as PlanStatus)
-    : undefined;
-  node.effort = (PLAN_EFFORTS as readonly string[]).includes(r.effort as string)
-    ? (r.effort as PlanEffort)
-    : undefined;
-  node.priority = (PLAN_PRIORITIES as readonly string[]).includes(r.priority as string)
-    ? (r.priority as PlanPriority)
-    : undefined;
-  node.owner = cleanStr(r.owner, MAX_OWNER);
-  node.due = cleanStr(r.due, MAX_DUE);
-  const link = cleanStr(r.link, MAX_LINK);
-  node.link = link && /^https?:\/\//i.test(link) ? link : undefined;
+  // Per-kind matrix: a field found on a kind that does not carry it is dropped, so
+  // old plans (when every kind had every field) converge to the matrix on hydrate.
+  if ((STATUS_KINDS as readonly string[]).includes(kind)) {
+    node.status = (PLAN_STATUSES as readonly string[]).includes(r.status as string)
+      ? (r.status as PlanStatus)
+      : undefined;
+  }
+  if ((EFFORT_KINDS as readonly string[]).includes(kind)) {
+    node.effort = (PLAN_EFFORTS as readonly string[]).includes(r.effort as string)
+      ? (r.effort as PlanEffort)
+      : undefined;
+  }
+  if ((PRIORITY_KINDS as readonly string[]).includes(kind)) {
+    node.priority = (PLAN_PRIORITIES as readonly string[]).includes(r.priority as string)
+      ? (r.priority as PlanPriority)
+      : undefined;
+  }
+  if ((OWNER_KINDS as readonly string[]).includes(kind)) {
+    node.owner = cleanStr(r.owner, MAX_OWNER);
+  }
+  if ((DUE_KINDS as readonly string[]).includes(kind)) {
+    node.due = cleanStr(r.due, MAX_DUE);
+  }
+  if ((LINK_KINDS as readonly string[]).includes(kind)) {
+    const link = cleanStr(r.link, MAX_LINK);
+    node.link = link && /^https?:\/\//i.test(link) ? link : undefined;
+  }
   if (kind === "api") {
     node.method = (HTTP_METHODS as readonly string[]).includes(r.method as string)
       ? (r.method as HttpMethod)

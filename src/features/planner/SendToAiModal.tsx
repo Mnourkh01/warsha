@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Send, X } from "lucide-react";
 import { DialogTrap } from "../../lib/dialog-trap";
-import { clipboardWriteText } from "../../lib/ipc";
-import { AI_TYPES } from "../../lib/sessionTypes";
+import { clipboardWriteText, whichProgram } from "../../lib/ipc";
+import { AI_TYPES, type AiType } from "../../lib/sessionTypes";
 import { useStrings } from "../../lib/i18n";
 import { MAX_PER_WS, useWorkspaces } from "../../store/workspaces";
 import { usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
-import { buildClaudePrompt } from "./prompt";
+import { buildPlanPrompt } from "./prompt";
 import { planToMarkdown } from "./serializeMarkdown";
-import { sendPlanToClaude, type SendError } from "./sendToClaude";
+import { sendPlanToAi, type SendError } from "./sendToAi";
 
-/** Preview-and-confirm step before the handoff: the prompt is editable, and errors
- *  (CLI missing, workspace full) surface here instead of failing silently. */
-export function SendToClaudeModal({
+/** Preview-and-confirm step before the handoff: pick which AI CLI receives the plan
+ *  (Claude Code, Gemini CLI, or Codex), edit the prompt, then send. Errors (CLI
+ *  missing, workspace full) surface here instead of failing silently. */
+export function SendToAiModal({
   wsId,
   cwd,
   onClose,
@@ -28,10 +29,13 @@ export function SendToClaudeModal({
     const ws = s.workspaces.find((w) => w.id === wsId);
     return !!ws && ws.sessionIds.length >= MAX_PER_WS;
   });
+  const [ai, setAi] = useState<AiType>(AI_TYPES[0]);
+  // Absent = probe still running; a missing CLI disables Send and shows its install line.
+  const [avail, setAvail] = useState<Record<string, boolean>>({});
   const [prompt, setPrompt] = useState(() => {
     const doc = usePlans.getState().plans[wsId];
     if (!doc) return "";
-    return buildClaudePrompt(planToMarkdown(doc, { cwd }), {
+    return buildPlanPrompt(planToMarkdown(doc, { cwd }), {
       cwd,
       planName: doc.name.trim() || "Plan",
     });
@@ -40,7 +44,23 @@ export function SendToClaudeModal({
   const busyRef = useRef(false);
   const [error, setError] = useState<SendError | null>(null);
   const [copied, setCopied] = useState(false);
-  const claude = AI_TYPES.find((a) => a.id === "claude");
+
+  // Probe all CLIs once so the picker can mark what is installed on this PC.
+  useEffect(() => {
+    let alive = true;
+    for (const a of AI_TYPES) {
+      whichProgram(a.cli)
+        .then((found) => {
+          if (alive) setAvail((prev) => ({ ...prev, [a.id]: !!found }));
+        })
+        .catch(() => {
+          if (alive) setAvail((prev) => ({ ...prev, [a.id]: false }));
+        });
+    }
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // The planner is a view mode, not part of the App Escape chain; the modal closes
   // itself - but not while a higher layer (command palette) owns the Escape press,
@@ -61,7 +81,7 @@ export function SendToClaudeModal({
     setBusy(true);
     busyRef.current = true;
     setError(null);
-    const err = await sendPlanToClaude(prompt);
+    const err = await sendPlanToAi(prompt, ai);
     // On success the send flow closed the planner, which unmounted this modal.
     if (err) {
       setError(err);
@@ -69,6 +89,8 @@ export function SendToClaudeModal({
       busyRef.current = false;
     }
   };
+
+  const missing = avail[ai.id] === false || error === "cli-missing";
 
   return (
     <div
@@ -99,6 +121,25 @@ export function SendToClaudeModal({
           </button>
         </div>
         <div className="dialog-body">
+          <div className="field">
+            <span className="field-label">{t.sendPlanTarget}</span>
+            <div className="seg plan-send-target">
+              {AI_TYPES.map((a) => (
+                <button
+                  key={a.id}
+                  className={ai.id === a.id ? "on" : ""}
+                  disabled={busy}
+                  onClick={() => {
+                    setAi(a);
+                    setError(null);
+                  }}
+                >
+                  {a.label}
+                  {avail[a.id] === false ? ` (${t.sendPlanNotFound})` : ""}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="plan-send-folder">{cwd ? t.sendPlanFolder(cwd) : t.sendPlanNoFolder}</div>
           <label className="field">
             <span className="field-label">{t.sendPlanPromptLabel}</span>
@@ -114,17 +155,17 @@ export function SendToClaudeModal({
           {(full || error === "workspace-full") && (
             <div className="picker-error">{t.workspaceFullMsg(MAX_PER_WS)}</div>
           )}
-          {error === "claude-missing" && claude && (
+          {missing && (
             <div className="install-note">
-              <div className="install-title">{t.notInstalled(claude.label)}</div>
+              <div className="install-title">{t.notInstalled(ai.label)}</div>
               <div className="install-row">
-                <code>{claude.install}</code>
+                <code>{ai.install}</code>
                 <button
                   className="icon-btn"
                   title={t.copyInstall}
                   aria-label={t.copyInstall}
                   onClick={() => {
-                    void clipboardWriteText(claude.install)
+                    void clipboardWriteText(ai.install)
                       .then(() => setCopied(true))
                       .catch(() => {});
                   }}
@@ -141,11 +182,11 @@ export function SendToClaudeModal({
             </button>
             <button
               className="btn"
-              disabled={busy || full || prompt.trim().length === 0}
+              disabled={busy || full || missing || prompt.trim().length === 0}
               onClick={() => void send()}
             >
               <Send size={14} />
-              {busy ? t.sendPlanBusy : t.sendPlanGo}
+              {busy ? t.sendPlanBusy(ai.label) : t.sendPlanGo}
             </button>
           </div>
         </div>

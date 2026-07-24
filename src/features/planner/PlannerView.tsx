@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ClipboardCheck, FileDown, Play, Send, Sparkles, Workflow } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "../../styles/planner.css";
-import { clipboardWriteText } from "../../lib/ipc";
+import { clipboardWriteText, planFileSave } from "../../lib/ipc";
 import { useStrings } from "../../lib/i18n";
 import { useSettings } from "../../store/settings";
 import { usePlans } from "../../store/plans";
@@ -10,7 +10,7 @@ import { useUI } from "../../store/ui";
 import { useWorkspaces } from "../../store/workspaces";
 import { PlanCanvas } from "./PlanCanvas";
 import { ReviewPanel, type ImproveState, type ReviewState } from "./ReviewPanel";
-import { SendToClaudeModal } from "./SendToClaudeModal";
+import { SendToAiModal } from "./SendToAiModal";
 import { runPlanImprove } from "./improve";
 import { runPlanReview, type ReviewError } from "./review";
 import { runPlanSimulation, type PlanSimulation } from "./simulate";
@@ -57,9 +57,26 @@ export function PlannerView() {
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (!doc) return null;
-
   const cwd = ws?.defaultCwd ?? globalCwd;
+
+  // Mirror the plan to <cwd>/.warsha/plan.md (debounced) so any AI CLI working in the
+  // project folder - claude, codex, gemini - can read the current plan on request.
+  // Keyed on updatedAt: panning bumps the doc object but not updatedAt, so it never
+  // rewrites the file. Empty plans write nothing (no littering fresh folders).
+  const updatedAt = doc?.updatedAt;
+  useEffect(() => {
+    if (!cwd || !updatedAt) return;
+    const timer = setTimeout(() => {
+      const current = usePlans.getState().plans[wsId];
+      if (!current || current.nodes.length === 0) return;
+      planFileSave(cwd, planToMarkdown(current, { cwd })).catch((e) => {
+        console.warn("plan file mirror failed", e);
+      });
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [cwd, wsId, updatedAt]);
+
+  if (!doc) return null;
 
   const exportMarkdown = async () => {
     const current = usePlans.getState().plans[wsId];
@@ -180,7 +197,7 @@ export function PlannerView() {
           onClick={() => setPlanSend(true)}
         >
           <Send size={14} />
-          {t.sendToClaude}
+          {t.sendToAi}
         </button>
         <button className="btn-ghost" onClick={() => useUI.getState().setPlanner(false)}>
           <ArrowLeft size={14} />
@@ -211,7 +228,7 @@ export function PlannerView() {
           ) : undefined
         }
       />
-      {sendOpen && <SendToClaudeModal wsId={wsId} cwd={cwd} onClose={() => setPlanSend(false)} />}
+      {sendOpen && <SendToAiModal wsId={wsId} cwd={cwd} onClose={() => setPlanSend(false)} />}
     </div>
   );
 }

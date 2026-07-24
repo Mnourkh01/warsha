@@ -89,6 +89,93 @@ pub fn session_state_backup(app: AppHandle, label: String) -> Result<(), String>
     session::backup(&app, &label)
 }
 
+/// A plan's on-disk mirror inside the project folder, readable by any AI CLI that
+/// works in that folder (claude, codex, gemini).
+const PLAN_DIR: &str = ".warsha";
+const PLAN_FILE: &str = "plan.md";
+/// Well under the 5 MB state cap; a plan at the node/edge limits serializes far smaller.
+const MAX_PLAN_MD_BYTES: usize = 2 * 1024 * 1024;
+
+/// Write `<dir>/.warsha/plan.md` atomically (temp + rename, same discipline as the
+/// state file). `dir` comes from the WebView, so it must already exist as a directory;
+/// this command never creates project folders, only the `.warsha` mirror inside one.
+#[tauri::command(async)]
+pub fn plan_file_save(dir: String, markdown: String) -> Result<String, String> {
+    plan_file_save_at(std::path::Path::new(&dir), &markdown)
+}
+
+fn plan_file_save_at(base: &std::path::Path, markdown: &str) -> Result<String, String> {
+    if markdown.len() > MAX_PLAN_MD_BYTES {
+        tracing::warn!(bytes = markdown.len(), "plan markdown over limit, save rejected");
+        return Err("plan too large to save".to_string());
+    }
+    if !base.is_dir() {
+        return Err(format!("project folder does not exist: {}", base.display()));
+    }
+    let folder = base.join(PLAN_DIR);
+    std::fs::create_dir_all(&folder).map_err(|e| {
+        tracing::warn!(error = %e, "create plan dir failed");
+        format!("create {PLAN_DIR} failed: {e}")
+    })?;
+    let path = folder.join(PLAN_FILE);
+    let tmp = folder.join(format!("{PLAN_FILE}.tmp"));
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&tmp).map_err(|e| {
+            tracing::warn!(error = %e, "create temp plan file failed");
+            format!("write plan file failed: {e}")
+        })?;
+        f.write_all(markdown.as_bytes()).map_err(|e| {
+            tracing::warn!(error = %e, "write temp plan file failed");
+            format!("write plan file failed: {e}")
+        })?;
+        f.sync_all().map_err(|e| {
+            tracing::warn!(error = %e, "sync temp plan file failed");
+            format!("write plan file failed: {e}")
+        })?;
+    }
+    std::fs::rename(&tmp, &path).map_err(|e| {
+        tracing::warn!(error = %e, "rename plan file failed");
+        format!("save plan file failed: {e}")
+    })?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("warsha-plan-test-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        dir
+    }
+
+    #[test]
+    fn plan_file_save_writes_and_overwrites() {
+        let dir = test_dir("save");
+        let p1 = plan_file_save_at(&dir, "# Plan v1\n").expect("first save");
+        assert!(std::path::Path::new(&p1).exists());
+        plan_file_save_at(&dir, "# Plan v2\n").expect("second save");
+        let body = std::fs::read_to_string(&p1).expect("read back");
+        assert_eq!(body, "# Plan v2\n");
+        assert!(!dir.join(PLAN_DIR).join(format!("{PLAN_FILE}.tmp")).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn plan_file_save_rejects_missing_dir_and_oversize() {
+        let missing = std::env::temp_dir().join("warsha-plan-test-definitely-missing");
+        let _ = std::fs::remove_dir_all(&missing);
+        assert!(plan_file_save_at(&missing, "x").is_err());
+        let dir = test_dir("cap");
+        let big = "x".repeat(MAX_PLAN_MD_BYTES + 1);
+        assert!(plan_file_save_at(&dir, &big).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 /// Check GitHub for a newer release (via the user's gh CLI). None = up to date or
 /// cannot check; the frontend stays silent either way.
 #[tauri::command(async)]

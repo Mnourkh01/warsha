@@ -131,8 +131,10 @@ describe("sanitizePlanDoc", () => {
     );
     const byId = new Map(out?.nodes.map((n) => [n.id, n]));
     expect(byId.get("d")?.acceptance).toEqual(["A", "B"]);
-    expect(byId.get("d")?.status).toBe("doing");
-    expect(byId.get("d")?.effort).toBe("m");
+    // The per-kind matrix drops progress fields from decisions: a decision's state
+    // is its chosen option, not a status.
+    expect(byId.get("d")?.status).toBeUndefined();
+    expect(byId.get("d")?.effort).toBeUndefined();
     expect(byId.get("q")?.acceptance).toEqual(["boots"]);
     expect(byId.get("s")?.path).toBe("/login");
     const withAi = sanitizePlanDoc(
@@ -181,7 +183,7 @@ describe("sanitizePlanDoc", () => {
     expect(byId.get("sv1")?.spec).toBe("Rust + Tauri");
   });
 
-  it("validates priority, owner, due, and link (http(s) only)", () => {
+  it("validates priority, owner, due, and link per the kind matrix (http(s) only)", () => {
     const out = sanitizePlanDoc(
       doc({
         nodes: [
@@ -193,8 +195,11 @@ describe("sanitizePlanDoc", () => {
           }),
           node("b", {
             priority: "urgent" as never,
-            link: "javascript:alert(1)" as never,
           }),
+          node("s", { kind: "screen", link: "https://example.com/mock" }),
+          node("s2", { kind: "screen", link: "javascript:alert(1)" as never }),
+          node("g", { kind: "gate", owner: "me", acceptance: ["review passed"] }),
+          node("n", { kind: "note", status: "doing" as never, link: "https://x.y" as never }),
         ],
       }),
     );
@@ -202,9 +207,15 @@ describe("sanitizePlanDoc", () => {
     expect(byId.get("a")?.priority).toBe("must");
     expect(byId.get("a")?.owner).toBe("  Claude  ".slice(0, 80));
     expect(byId.get("a")?.due).toBe("Friday");
-    expect(byId.get("a")?.link).toBe("https://example.com/spec");
+    // Tasks no longer carry a reference URL; links live only on screen/integration.
+    expect(byId.get("a")?.link).toBeUndefined();
     expect(byId.get("b")?.priority).toBeUndefined();
-    expect(byId.get("b")?.link).toBeUndefined();
+    expect(byId.get("s")?.link).toBe("https://example.com/mock");
+    expect(byId.get("s2")?.link).toBeUndefined();
+    expect(byId.get("g")?.owner).toBe("me");
+    expect(byId.get("g")?.acceptance).toEqual(["review passed"]);
+    expect(byId.get("n")?.status).toBeUndefined();
+    expect(byId.get("n")?.link).toBeUndefined();
   });
 
   it("nulls phaseId that does not point at a surviving phase node", () => {

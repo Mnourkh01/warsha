@@ -123,6 +123,7 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     test: "Check",
     agent: "Tool",
     screen: "Part",
+    gate: "Criterion",
   };
 
   const SPEC_LABEL: Partial<Record<PlanNodeKind, string>> = {
@@ -180,7 +181,7 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     for (const f of m.fields ?? []) {
       push(`  - \`${code(f.name)}\`: ${inline(f.type)}${f.note ? ` - ${inline(f.note)}` : ""}`);
     }
-    if (m.owner) push(`  - Owner: ${inline(m.owner)}`);
+    if (m.owner) push(`  - ${m.kind === "gate" ? "Approver" : "Owner"}: ${inline(m.owner)}`);
     if (m.due) push(`  - Due: ${inline(m.due)}`);
     if (m.link && /^https?:\/\//i.test(m.link)) push(`  - Link: ${inline(m.link)}`);
     for (const line of arrowLines) push(`  - ${line}`);
@@ -216,6 +217,10 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     if (p.description) {
       push();
       push(block(p.description));
+    }
+    if (p.due) {
+      push();
+      push(`Due: ${inline(p.due)}`);
     }
     const arrowLines = edgeLines(p);
     if (arrowLines.length > 0) {

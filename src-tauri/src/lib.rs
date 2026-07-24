@@ -38,6 +38,7 @@ pub fn run() {
             commands::session_state_load,
             commands::session_state_save,
             commands::session_state_backup,
+            commands::plan_file_save,
             commands::update_check,
         ])
         .build(tauri::generate_context!())

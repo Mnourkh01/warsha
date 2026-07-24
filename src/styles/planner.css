@@ -137,8 +137,8 @@
 
 /* ---- node cards ---- */
 .plan-node {
-  min-width: 150px;
-  max-width: 220px;
+  min-width: 176px;
+  max-width: 264px;
   background: var(--bg-elev);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -243,10 +243,67 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* List preview: the first few acceptance items / data fields, then "+N more". */
+.plan-node-list {
+  margin: 3px 0 0;
+  padding-inline-start: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  list-style: disc;
+}
+.plan-node-list li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-node-list.mono {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  list-style: none;
+  padding-inline-start: 2px;
+}
+.plan-node-list .plan-node-more {
+  list-style: none;
+  margin-inline-start: -13px;
+  color: var(--text-faint);
+}
+.plan-node-list.mono .plan-node-more {
+  margin-inline-start: 0;
+}
+/* Owner / due chips at the card's foot. */
+.plan-node-meta {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.plan-node-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-node-meta svg {
+  flex: none;
+  color: var(--text-faint);
+}
 
 /* ---- inspector ---- */
 .plan-inspector {
-  width: 250px;
+  width: 260px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -271,6 +328,16 @@
   min-height: 60px;
   font-size: 12.5px;
   line-height: 1.5;
+}
+/* Four-option rows (note type, test type) must never clip their last button: let the
+   segmented control wrap and give each button room to shrink. */
+.plan-inspector .seg {
+  flex-wrap: wrap;
+}
+.plan-inspector .seg button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-inline: 8px;
 }
 .input.mono {
   font-family: var(--font-mono);
@@ -801,6 +868,14 @@
 /* ---- send modal ---- */
 .plan-send-dialog {
   width: 560px;
+}
+/* Three CLI names plus a possible "(not installed)" suffix: wrap, never clip. */
+.plan-send-target {
+  flex-wrap: wrap;
+}
+.plan-send-target button {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .plan-send-folder {
   font-size: 12.5px;

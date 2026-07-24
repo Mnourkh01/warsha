@@ -96,6 +96,13 @@ export async function runHeadless(
   return await invoke<HeadlessResult>("run_headless", { program, args, stdin, timeoutMs });
 }
 
+/** Mirror the plan's markdown to `<dir>/.warsha/plan.md` (atomic write in Rust) so
+ *  any AI CLI working in that folder can read the current plan. Returns the full
+ *  path of the written file. */
+export async function planFileSave(dir: string, markdown: string): Promise<string> {
+  return await invoke<string>("plan_file_save", { dir, markdown });
+}
+
 export interface ShellCheckResult {
   ok: boolean;
   /** Short reason when not ok (trimmed program output). */

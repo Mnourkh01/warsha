@@ -6,12 +6,18 @@ import {
   API_AUTHS,
   DATA_SENSITIVITIES,
   DEPLOY_ENVS,
+  DUE_KINDS,
+  EFFORT_KINDS,
   HTTP_METHODS,
+  LINK_KINDS,
   LIST_KINDS,
   MODEL_KINDS,
   NOTE_FLAVORS,
+  OWNER_KINDS,
   PLAN_PRIORITIES,
+  PRIORITY_KINDS,
   SPEC_KINDS,
+  STATUS_KINDS,
   TEST_TYPES,
   MAX_ACCEPTANCE,
   MAX_ACCEPTANCE_LEN,
@@ -99,9 +105,14 @@ function SegChoice<T extends string>({
   );
 }
 
-/** Right panel for the selected block. Text lists (acceptance, fields) keep a local
- *  draft for DISPLAY (so mid-typing blank lines are not filtered away) but commit the
- *  parsed value on every change - nothing is lost if the panel unmounts mid-edit. */
+/** Right panel for the selected block. Field order tells the story of the block:
+ *  what it is (label, description, kind-specific core), then the work plumbing
+ *  (status, effort, priority, people, dates), then bookkeeping (phase, link, color).
+ *  Which fields exist at all comes from the per-kind matrix in store/plans.ts.
+ *
+ *  Text lists (acceptance, fields) keep a local draft for DISPLAY (so mid-typing blank
+ *  lines are not filtered away) but commit the parsed value on every change - nothing
+ *  is lost if the panel unmounts mid-edit. */
 export function Inspector({
   node,
   phases,
@@ -123,12 +134,17 @@ export function Inspector({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id]);
 
-  const Icon = KIND_META[node.kind].icon;
+  const kind = node.kind;
+  const has = (kinds: readonly string[]) => kinds.includes(kind);
+  const hasOwner = has(OWNER_KINDS);
+  const hasDue = has(DUE_KINDS);
+
+  const Icon = KIND_META[kind].icon;
   return (
     <aside className="plan-inspector" aria-label={t.inspectorTitle}>
       <div className="plan-inspector-kind">
         <Icon size={14} />
-        <span>{t.planKind[node.kind]}</span>
+        <span>{t.planKind[kind]}</span>
       </div>
       <label className="field">
         <span className="field-label">{t.inspLabel}</span>
@@ -151,6 +167,307 @@ export function Inspector({
           onChange={(e) => onPatch({ description: e.target.value || undefined })}
         />
       </label>
+
+      {/* ---- what this block IS (kind-specific core) ---- */}
+      {kind === "note" && (
+        <SegChoice
+          label={t.inspFlavor}
+          value={node.flavor}
+          options={NOTE_FLAVORS}
+          names={{
+            idea: t.flavorIdea,
+            risk: t.flavorRisk,
+            question: t.flavorQuestion,
+            constraint: t.flavorConstraint,
+          }}
+          onPick={(flavor) => onPatch({ flavor })}
+        />
+      )}
+      {kind === "api" && (
+        <label className="field">
+          <span className="field-label">{t.inspMethod}</span>
+          <select
+            className="select"
+            value={node.method ?? "GET"}
+            onChange={(e) => onPatch({ method: e.target.value as HttpMethod })}
+          >
+            {HTTP_METHODS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {has(PATH_KINDS) && (
+        <label className="field">
+          <span className="field-label">{kind === "screen" ? t.inspRoute : t.inspPath}</span>
+          <input
+            className="input mono"
+            placeholder={kind === "screen" ? "/login" : "/api/things"}
+            maxLength={MAX_PATH}
+            value={node.path ?? ""}
+            onChange={(e) => onPatch({ path: e.target.value || undefined })}
+          />
+        </label>
+      )}
+      {kind === "api" && (
+        <SegChoice
+          label={t.inspAuth}
+          value={node.auth}
+          options={API_AUTHS}
+          names={{ public: t.authPublic, user: t.authUser, admin: t.authAdmin }}
+          onPick={(auth) => onPatch({ auth })}
+        />
+      )}
+      {has(MODEL_KINDS) && (
+        <label className="field">
+          <span className="field-label">{t.inspModel}</span>
+          <input
+            className="input mono"
+            placeholder="claude-sonnet-5"
+            maxLength={60}
+            value={node.model ?? ""}
+            onChange={(e) => onPatch({ model: e.target.value || undefined })}
+          />
+        </label>
+      )}
+      {has(SPEC_KINDS) && (
+        <label className="field">
+          <span className="field-label">
+            {kind === "service"
+              ? t.specTech
+              : kind === "ai"
+                ? t.specContract
+                : kind === "agent"
+                  ? t.specExit
+                  : kind === "integration"
+                    ? t.specProvider
+                    : kind === "data"
+                      ? t.specKey
+                      : t.specRollback}
+          </span>
+          <input
+            className="input bidi-auto"
+            dir="auto"
+            maxLength={200}
+            value={node.spec ?? ""}
+            onChange={(e) => onPatch({ spec: e.target.value || undefined })}
+          />
+        </label>
+      )}
+      {kind === "data" && (
+        <SegChoice
+          label={t.inspSensitivity}
+          value={node.sensitivity}
+          options={DATA_SENSITIVITIES}
+          names={{ none: t.sensNone, personal: t.sensPersonal, sensitive: t.sensSensitive }}
+          onPick={(sensitivity) => onPatch({ sensitivity })}
+        />
+      )}
+      {kind === "test" && (
+        <SegChoice
+          label={t.inspTestType}
+          value={node.testType}
+          options={TEST_TYPES}
+          names={{ unit: t.ttUnit, integration: t.ttIntegration, e2e: t.ttE2e, manual: t.ttManual }}
+          onPick={(testType) => onPatch({ testType })}
+        />
+      )}
+      {kind === "deploy" && (
+        <SegChoice
+          label={t.inspEnv}
+          value={node.env}
+          options={DEPLOY_ENVS}
+          names={{ dev: t.envDev, staging: t.envStaging, prod: t.envProd }}
+          onPick={(env) => onPatch({ env })}
+        />
+      )}
+      {has(LIST_KINDS) && (
+        <label className="field">
+          <span className="field-label">
+            {kind === "decision"
+              ? t.inspOptions
+              : kind === "test"
+                ? t.inspChecks
+                : kind === "agent"
+                  ? t.inspTools
+                  : kind === "phase"
+                    ? t.inspExitCriteria
+                    : kind === "screen"
+                      ? t.inspScreenParts
+                      : kind === "gate"
+                        ? t.inspGateCriteria
+                        : t.inspAcceptance}{" "}
+            <span className="field-hint">{t.inspAcceptanceHint}</span>
+          </span>
+          <textarea
+            className="input plan-textarea"
+            rows={4}
+            value={acceptDraft}
+            onChange={(e) => {
+              setAcceptDraft(e.target.value);
+              const acceptance = parseAcceptance(e.target.value);
+              onPatch({ acceptance: acceptance.length > 0 ? acceptance : undefined });
+            }}
+          />
+        </label>
+      )}
+      {kind === "decision" && (node.acceptance?.length ?? 0) > 0 && (
+        <label className="field">
+          <span className="field-label">{t.inspChosen}</span>
+          <select
+            className="select"
+            value={node.chosen ?? ""}
+            onChange={(e) => onPatch({ chosen: e.target.value || undefined })}
+          >
+            <option value="">{t.chosenNone}</option>
+            {(node.acceptance ?? []).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {kind === "data" && (
+        <label className="field">
+          <span className="field-label">
+            {t.inspFields} <span className="field-hint">{t.inspFieldsHint}</span>
+          </span>
+          <textarea
+            className="input plan-textarea mono"
+            rows={5}
+            value={fieldsDraft}
+            onChange={(e) => {
+              setFieldsDraft(e.target.value);
+              const fields = parseFields(e.target.value);
+              onPatch({ fields: fields.length > 0 ? fields : undefined });
+            }}
+          />
+        </label>
+      )}
+
+      {/* ---- work plumbing (only on kinds that carry it) ---- */}
+      {has(STATUS_KINDS) && (
+        <div className="field">
+          <span className="field-label">{t.inspStatus}</span>
+          <div className="seg">
+            <button
+              className={!node.status ? "on" : ""}
+              onClick={() => onPatch({ status: undefined })}
+            >
+              {t.statusTodo}
+            </button>
+            <button
+              className={node.status === "doing" ? "on" : ""}
+              onClick={() => onPatch({ status: "doing" })}
+            >
+              {t.statusDoing}
+            </button>
+            <button
+              className={node.status === "done" ? "on" : ""}
+              onClick={() => onPatch({ status: "done" })}
+            >
+              {t.statusDone}
+            </button>
+          </div>
+        </div>
+      )}
+      {has(EFFORT_KINDS) && (
+        <div className="field">
+          <span className="field-label">{t.inspEffort}</span>
+          <div className="seg">
+            {(["s", "m", "l"] as PlanEffort[]).map((e) => (
+              <button
+                key={e}
+                className={node.effort === e ? "on" : ""}
+                aria-label={e === "s" ? t.effortSmall : e === "m" ? t.effortMedium : t.effortLarge}
+                onClick={() => onPatch({ effort: node.effort === e ? undefined : e })}
+              >
+                {e.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {has(PRIORITY_KINDS) && (
+        <div className="field">
+          <span className="field-label">{t.inspPriority}</span>
+          <div className="seg">
+            {PLAN_PRIORITIES.map((p) => (
+              <button
+                key={p}
+                className={node.priority === p ? "on" : ""}
+                onClick={() => onPatch({ priority: node.priority === p ? undefined : p })}
+              >
+                {p === "must" ? t.priorityMust : p === "should" ? t.priorityShould : t.priorityCould}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {(hasOwner || hasDue) && (
+        <div className={hasOwner && hasDue ? "plan-two" : undefined}>
+          {hasOwner && (
+            <label className="field">
+              <span className="field-label">{kind === "gate" ? t.inspApprover : t.inspOwner}</span>
+              <input
+                className="input bidi-auto"
+                dir="auto"
+                maxLength={80}
+                value={node.owner ?? ""}
+                onChange={(e) => onPatch({ owner: e.target.value || undefined })}
+              />
+            </label>
+          )}
+          {hasDue && (
+            <label className="field">
+              <span className="field-label">{t.inspDue}</span>
+              <input
+                className="input bidi-auto"
+                dir="auto"
+                maxLength={40}
+                value={node.due ?? ""}
+                onChange={(e) => onPatch({ due: e.target.value || undefined })}
+              />
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* ---- bookkeeping ---- */}
+      {kind !== "phase" && (
+        <label className="field">
+          <span className="field-label">{t.inspPhase}</span>
+          <select
+            className="select"
+            value={node.phaseId ?? ""}
+            onChange={(e) => onPatch({ phaseId: e.target.value || undefined })}
+          >
+            <option value="">{t.inspNoPhase}</option>
+            {phases.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {has(LINK_KINDS) && (
+        <label className="field">
+          <span className="field-label">
+            {kind === "screen" ? t.inspDesignLink : t.inspDocsLink}
+          </span>
+          <input
+            className="input mono"
+            placeholder="https://..."
+            maxLength={300}
+            value={node.link ?? ""}
+            onChange={(e) => onPatch({ link: e.target.value || undefined })}
+          />
+        </label>
+      )}
       <div className="field">
         <span className="field-label">{t.inspColor}</span>
         <div className="plan-swatches" role="group" aria-label={t.inspColor}>
@@ -172,289 +489,6 @@ export function Inspector({
           ))}
         </div>
       </div>
-      <div className="field">
-        <span className="field-label">{t.inspStatus}</span>
-        <div className="seg">
-          <button
-            className={!node.status ? "on" : ""}
-            onClick={() => onPatch({ status: undefined })}
-          >
-            {t.statusTodo}
-          </button>
-          <button
-            className={node.status === "doing" ? "on" : ""}
-            onClick={() => onPatch({ status: "doing" })}
-          >
-            {t.statusDoing}
-          </button>
-          <button
-            className={node.status === "done" ? "on" : ""}
-            onClick={() => onPatch({ status: "done" })}
-          >
-            {t.statusDone}
-          </button>
-        </div>
-      </div>
-      {node.kind !== "phase" && node.kind !== "note" && (
-        <div className="field">
-          <span className="field-label">{t.inspEffort}</span>
-          <div className="seg">
-            {(["s", "m", "l"] as PlanEffort[]).map((e) => (
-              <button
-                key={e}
-                className={node.effort === e ? "on" : ""}
-                aria-label={e === "s" ? t.effortSmall : e === "m" ? t.effortMedium : t.effortLarge}
-                onClick={() => onPatch({ effort: node.effort === e ? undefined : e })}
-              >
-                {e.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {node.kind !== "phase" && node.kind !== "note" && (
-        <div className="field">
-          <span className="field-label">{t.inspPriority}</span>
-          <div className="seg">
-            {PLAN_PRIORITIES.map((p) => (
-              <button
-                key={p}
-                className={node.priority === p ? "on" : ""}
-                onClick={() => onPatch({ priority: node.priority === p ? undefined : p })}
-              >
-                {p === "must" ? t.priorityMust : p === "should" ? t.priorityShould : t.priorityCould}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {node.kind !== "note" && (
-        <div className="plan-two">
-          <label className="field">
-            <span className="field-label">{t.inspOwner}</span>
-            <input
-              className="input bidi-auto"
-              dir="auto"
-              maxLength={80}
-              value={node.owner ?? ""}
-              onChange={(e) => onPatch({ owner: e.target.value || undefined })}
-            />
-          </label>
-          <label className="field">
-            <span className="field-label">{t.inspDue}</span>
-            <input
-              className="input bidi-auto"
-              dir="auto"
-              maxLength={40}
-              value={node.due ?? ""}
-              onChange={(e) => onPatch({ due: e.target.value || undefined })}
-            />
-          </label>
-        </div>
-      )}
-      <label className="field">
-        <span className="field-label">{t.inspLink}</span>
-        <input
-          className="input mono"
-          placeholder="https://..."
-          maxLength={300}
-          value={node.link ?? ""}
-          onChange={(e) => onPatch({ link: e.target.value || undefined })}
-        />
-      </label>
-      {node.kind !== "phase" && (
-        <label className="field">
-          <span className="field-label">{t.inspPhase}</span>
-          <select
-            className="select"
-            value={node.phaseId ?? ""}
-            onChange={(e) => onPatch({ phaseId: e.target.value || undefined })}
-          >
-            <option value="">{t.inspNoPhase}</option>
-            {phases.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {node.kind === "api" && (
-        <label className="field">
-          <span className="field-label">{t.inspMethod}</span>
-          <select
-            className="select"
-            value={node.method ?? "GET"}
-            onChange={(e) => onPatch({ method: e.target.value as HttpMethod })}
-          >
-            {HTTP_METHODS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {(PATH_KINDS as readonly string[]).includes(node.kind) && (
-        <label className="field">
-          <span className="field-label">{node.kind === "screen" ? t.inspRoute : t.inspPath}</span>
-          <input
-            className="input mono"
-            placeholder={node.kind === "screen" ? "/login" : "/api/things"}
-            maxLength={MAX_PATH}
-            value={node.path ?? ""}
-            onChange={(e) => onPatch({ path: e.target.value || undefined })}
-          />
-        </label>
-      )}
-      {(MODEL_KINDS as readonly string[]).includes(node.kind) && (
-        <label className="field">
-          <span className="field-label">{t.inspModel}</span>
-          <input
-            className="input mono"
-            placeholder="claude-sonnet-5"
-            maxLength={60}
-            value={node.model ?? ""}
-            onChange={(e) => onPatch({ model: e.target.value || undefined })}
-          />
-        </label>
-      )}
-      {(SPEC_KINDS as readonly string[]).includes(node.kind) && (
-        <label className="field">
-          <span className="field-label">
-            {node.kind === "service"
-              ? t.specTech
-              : node.kind === "ai"
-                ? t.specContract
-                : node.kind === "agent"
-                  ? t.specExit
-                  : node.kind === "integration"
-                    ? t.specProvider
-                    : node.kind === "data"
-                      ? t.specKey
-                      : t.specRollback}
-          </span>
-          <input
-            className="input bidi-auto"
-            dir="auto"
-            maxLength={200}
-            value={node.spec ?? ""}
-            onChange={(e) => onPatch({ spec: e.target.value || undefined })}
-          />
-        </label>
-      )}
-      {node.kind === "api" && (
-        <SegChoice
-          label={t.inspAuth}
-          value={node.auth}
-          options={API_AUTHS}
-          names={{ public: t.authPublic, user: t.authUser, admin: t.authAdmin }}
-          onPick={(auth) => onPatch({ auth })}
-        />
-      )}
-      {node.kind === "note" && (
-        <SegChoice
-          label={t.inspFlavor}
-          value={node.flavor}
-          options={NOTE_FLAVORS}
-          names={{
-            idea: t.flavorIdea,
-            risk: t.flavorRisk,
-            question: t.flavorQuestion,
-            constraint: t.flavorConstraint,
-          }}
-          onPick={(flavor) => onPatch({ flavor })}
-        />
-      )}
-      {node.kind === "data" && (
-        <SegChoice
-          label={t.inspSensitivity}
-          value={node.sensitivity}
-          options={DATA_SENSITIVITIES}
-          names={{ none: t.sensNone, personal: t.sensPersonal, sensitive: t.sensSensitive }}
-          onPick={(sensitivity) => onPatch({ sensitivity })}
-        />
-      )}
-      {node.kind === "test" && (
-        <SegChoice
-          label={t.inspTestType}
-          value={node.testType}
-          options={TEST_TYPES}
-          names={{ unit: t.ttUnit, integration: t.ttIntegration, e2e: t.ttE2e, manual: t.ttManual }}
-          onPick={(testType) => onPatch({ testType })}
-        />
-      )}
-      {node.kind === "deploy" && (
-        <SegChoice
-          label={t.inspEnv}
-          value={node.env}
-          options={DEPLOY_ENVS}
-          names={{ dev: t.envDev, staging: t.envStaging, prod: t.envProd }}
-          onPick={(env) => onPatch({ env })}
-        />
-      )}
-      {node.kind === "decision" && (node.acceptance?.length ?? 0) > 0 && (
-        <label className="field">
-          <span className="field-label">{t.inspChosen}</span>
-          <select
-            className="select"
-            value={node.chosen ?? ""}
-            onChange={(e) => onPatch({ chosen: e.target.value || undefined })}
-          >
-            <option value="">{t.chosenNone}</option>
-            {(node.acceptance ?? []).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {(LIST_KINDS as readonly string[]).includes(node.kind) && (
-        <label className="field">
-          <span className="field-label">
-            {node.kind === "decision"
-              ? t.inspOptions
-              : node.kind === "test"
-                ? t.inspChecks
-                : node.kind === "agent"
-                  ? t.inspTools
-                  : node.kind === "phase"
-                    ? t.inspExitCriteria
-                    : node.kind === "screen"
-                      ? t.inspScreenParts
-                      : t.inspAcceptance}{" "}
-            <span className="field-hint">{t.inspAcceptanceHint}</span>
-          </span>
-          <textarea
-            className="input plan-textarea"
-            rows={4}
-            value={acceptDraft}
-            onChange={(e) => {
-              setAcceptDraft(e.target.value);
-              const acceptance = parseAcceptance(e.target.value);
-              onPatch({ acceptance: acceptance.length > 0 ? acceptance : undefined });
-            }}
-          />
-        </label>
-      )}
-      {node.kind === "data" && (
-        <label className="field">
-          <span className="field-label">
-            {t.inspFields} <span className="field-hint">{t.inspFieldsHint}</span>
-          </span>
-          <textarea
-            className="input plan-textarea mono"
-            rows={5}
-            value={fieldsDraft}
-            onChange={(e) => {
-              setFieldsDraft(e.target.value);
-              const fields = parseFields(e.target.value);
-              onPatch({ fields: fields.length > 0 ? fields : undefined });
-            }}
-          />
-        </label>
-      )}
       <button className="btn-ghost plan-delete" onClick={onDelete}>
         <Trash2 size={14} />
         {t.deleteNode}
