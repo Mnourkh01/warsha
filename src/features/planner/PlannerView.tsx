@@ -12,7 +12,14 @@ import {
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "../../styles/planner.css";
-import { clipboardWriteText, planDraftConsume, planDraftRead, planFileSave } from "../../lib/ipc";
+import {
+  clipboardWriteText,
+  planDraftConsume,
+  planDraftRead,
+  planFileSave,
+  planSpecSave,
+} from "../../lib/ipc";
+import { BLUEPRINT_SPEC } from "./blueprintSpec";
 import { useStrings } from "../../lib/i18n";
 import { useSettings } from "../../store/settings";
 import { sanitizePlanDoc, usePlans } from "../../store/plans";
@@ -29,6 +36,11 @@ import { planToMarkdown } from "./serializeMarkdown";
 
 /** How often the Blueprint checks the project folder for an AI-written draft. */
 const DRAFT_POLL_MS = 5000;
+
+/** Appended to the on-disk mirror ONLY (never to the export or the send prompt): any
+ *  AI that reads the plan also learns the write-back path, without a skill installed. */
+const MIRROR_FOOTER =
+  "\n---\nTo propose changes to this plan: write the full updated plan to .warsha/plan.draft.json (format spec: .warsha/BLUEPRINT.md). Warsha offers to load it while the Blueprint is open.\n";
 
 type DraftState =
   | { status: "none" }
@@ -84,14 +96,24 @@ export function PlannerView() {
   // Keyed on updatedAt: panning bumps the doc object but not updatedAt, so it never
   // rewrites the file. Empty plans write nothing (no littering fresh folders).
   const updatedAt = doc?.updatedAt;
+  const specWrittenFor = useRef<string | null>(null);
   useEffect(() => {
     if (!cwd || !updatedAt) return;
     const timer = setTimeout(() => {
       const current = usePlans.getState().plans[wsId];
       if (!current || current.nodes.length === 0) return;
-      planFileSave(cwd, planToMarkdown(current, { cwd })).catch((e) => {
+      planFileSave(cwd, planToMarkdown(current, { cwd }) + MIRROR_FOOTER).catch((e) => {
         console.warn("plan file mirror failed", e);
       });
+      // The format spec rides along once per folder, so a downloaded Warsha is
+      // self-contained: any AI that finds the mirror also finds the contract.
+      if (specWrittenFor.current !== cwd) {
+        planSpecSave(cwd, BLUEPRINT_SPEC)
+          .then(() => {
+            specWrittenFor.current = cwd;
+          })
+          .catch((e) => console.warn("blueprint spec write failed", e));
+      }
     }, 1200);
     return () => clearTimeout(timer);
   }, [cwd, wsId, updatedAt]);

@@ -1,12 +1,14 @@
-import { FolderInput, Maximize2, Minimize2, RadioTower, X } from "lucide-react";
+import { Eraser, FoldVertical, FolderInput, Maximize2, Minimize2, RadioTower, X } from "lucide-react";
 import { useWorkspaces } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
 import { useUI } from "../../store/ui";
 import { TerminalView } from "../terminal/TerminalView";
 import { FindBar } from "../terminal/FindBar";
 import { changeSessionFolder, closeSession, openSession } from "../../actions";
+import { getTerminal } from "../terminal/controller";
 import { tintClasses } from "../../lib/tints";
-import { pickFolder } from "../../lib/ipc";
+import { confirmDialog, pickFolder, ptyWrite } from "../../lib/ipc";
+import { AI_CONTEXT_COMMANDS } from "../../lib/sessionTypes";
 import { SessionIcon } from "../icons";
 import { useStrings } from "../../lib/i18n";
 
@@ -40,6 +42,24 @@ export function Pane({ sessionId }: { sessionId: string }) {
     }
   };
 
+  // Context-management buttons, only on sessions Warsha started with a known AI CLI
+  // and only while the process runs. The command is TYPED into the session (plus
+  // Enter); if the CLI died back to the shell, a stray "/clear" is a harmless
+  // unknown-command error - nothing here executes real shell logic.
+  const aiCmd =
+    session.typeId && session.typeId in AI_CONTEXT_COMMANDS
+      ? AI_CONTEXT_COMMANDS[session.typeId as keyof typeof AI_CONTEXT_COMMANDS]
+      : undefined;
+  const typeAiCommand = async (command: string, confirmText?: string) => {
+    if (confirmText && !(await confirmDialog(confirmText).catch(() => false))) return;
+    try {
+      await ptyWrite(sessionId, `${command}\r`);
+      getTerminal(sessionId)?.focus();
+    } catch (e) {
+      console.warn(`ai command ${command} failed for session ${sessionId}`, e);
+    }
+  };
+
   return (
     <div
       className={`pane${active ? " active" : ""}${tintClasses(session.tint)}`}
@@ -69,6 +89,32 @@ export function Pane({ sessionId }: { sessionId: string }) {
           />
         )}
         <span className="pane-actions">
+          {aiCmd && status === "running" && (
+            <>
+              <button
+                className="icon-btn sm"
+                title={t.aiCompactTitle(aiCmd.compact)}
+                aria-label={t.aiCompactTitle(aiCmd.compact)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void typeAiCommand(aiCmd.compact);
+                }}
+              >
+                <FoldVertical size={14} />
+              </button>
+              <button
+                className="icon-btn sm"
+                title={t.aiClearTitle(aiCmd.clear)}
+                aria-label={t.aiClearTitle(aiCmd.clear)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void typeAiCommand(aiCmd.clear, t.aiClearConfirm(session.name));
+                }}
+              >
+                <Eraser size={14} />
+              </button>
+            </>
+          )}
           <button
             className="icon-btn sm"
             title={t.changeFolder}

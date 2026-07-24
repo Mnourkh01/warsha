@@ -372,6 +372,12 @@ const en = {
   cmdClosePlanner: "Close the Blueprint",
   cmdSendPlan: "Send plan to an AI CLI",
   scPlanner: "Toggle the project Blueprint",
+  scCycleSessions: "Next / previous session",
+  scCycleWorkspaces: "Next / previous workspace",
+  aiClearTitle: (cmd: string) => `Clear AI chat (types ${cmd})`,
+  aiCompactTitle: (cmd: string) => `Compact AI chat (types ${cmd})`,
+  aiClearConfirm: (name: string) =>
+    `Start a fresh AI chat in "${name}"? The AI forgets this conversation.`,
   previewRun: "Run plan",
   previewTitle: "Run preview",
   previewClose: "Close preview",

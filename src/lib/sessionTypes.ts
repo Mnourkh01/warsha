@@ -62,6 +62,15 @@ export const SHELL_TYPES: ShellType[] = [
   },
 ];
 
+/** Context-management slash commands per AI CLI, typed into the session by the pane
+ *  buttons. Verified against each CLI's docs 2026-07: claude /clear + /compact,
+ *  gemini /clear + /compress, codex /new + /compact. */
+export const AI_CONTEXT_COMMANDS: Record<AiType["id"], { clear: string; compact: string }> = {
+  claude: { clear: "/clear", compact: "/compact" },
+  gemini: { clear: "/clear", compact: "/compress" },
+  codex: { clear: "/new", compact: "/compact" },
+};
+
 export const AI_TYPES: AiType[] = [
   {
     id: "claude",

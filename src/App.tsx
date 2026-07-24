@@ -11,6 +11,7 @@ import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useWorkspaces } from "./store/workspaces";
 import { useUI } from "./store/ui";
 import { useRuntime } from "./store/runtime";
+import { openSession, switchWorkspace } from "./actions";
 import { applyTheme, resolveTheme, setSystemTheme } from "./lib/theme";
 import { applySettingsToAll, getTerminal } from "./features/terminal/controller";
 import { noteExit } from "./features/terminal/attention";
@@ -209,6 +210,27 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         ui.togglePlanner();
+      } else if (e.ctrlKey && !e.altKey && (e.key === "PageDown" || e.key === "PageUp")) {
+        // Cycle sessions (Ctrl) or workspaces (Ctrl+Shift), wrap-around, browser-tab
+        // convention. Intercepted at capture so the chord never reaches the shell.
+        e.preventDefault();
+        e.stopPropagation();
+        const dir = e.key === "PageDown" ? 1 : -1;
+        const ws = useWorkspaces.getState();
+        if (e.shiftKey) {
+          const list = ws.workspaces;
+          if (list.length > 1) {
+            const i = list.findIndex((w) => w.id === ws.activeWorkspaceId);
+            switchWorkspace(list[(i + dir + list.length) % list.length].id);
+          }
+        } else {
+          const active = ws.workspaces.find((w) => w.id === ws.activeWorkspaceId);
+          const ids = active?.sessionIds ?? [];
+          if (ids.length > 1) {
+            const i = ids.indexOf(ws.activeSessionId ?? "");
+            openSession(ids[(Math.max(i, 0) + dir + ids.length) % ids.length]);
+          }
+        }
       } else if (e.key === "Escape") {
         // Close topmost-first, one layer per press. (The find bar handles its own
         // Escape while its input is focused; this covers focus elsewhere.)
