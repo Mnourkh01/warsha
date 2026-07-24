@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Sparkles,
   TriangleAlert,
+  Wand2,
   Wrench,
   X,
 } from "lucide-react";
@@ -14,6 +15,8 @@ import { useState } from "react";
 import { clipboardWriteText } from "../../lib/ipc";
 import { AI_TYPES } from "../../lib/sessionTypes";
 import { useStrings } from "../../lib/i18n";
+import type { PlanDoc } from "../../store/plans";
+import type { DraftDiff } from "./improve";
 import type { PlanReview, ReviewError } from "./review";
 
 export type ReviewState =
@@ -22,15 +25,32 @@ export type ReviewState =
   | { status: "done"; data: PlanReview }
   | { status: "error"; error: ReviewError; raw?: string };
 
+export type ImproveState =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "ready"; draft: PlanDoc; diff: DraftDiff }
+  | { status: "applied" }
+  | { status: "error"; error: ReviewError; raw?: string };
+
 /** Right panel for the AI plan review: idle explainer, progress, typed verdict, or a
  *  readable failure with retry. Presentation only; the run lives in PlannerView. */
 export function ReviewPanel({
   state,
+  improve,
   onRun,
+  onImprove,
+  onApplyImprove,
+  onDiscardImprove,
+  onRevertImprove,
   onClose,
 }: {
   state: ReviewState;
+  improve: ImproveState;
   onRun: () => void;
+  onImprove: () => void;
+  onApplyImprove: () => void;
+  onDiscardImprove: () => void;
+  onRevertImprove: () => void;
   onClose: () => void;
 }) {
   const t = useStrings();
@@ -116,6 +136,13 @@ export function ReviewPanel({
               </ul>
             </div>
           )}
+          <ImproveSection
+            improve={improve}
+            onImprove={onImprove}
+            onApply={onApplyImprove}
+            onDiscard={onDiscardImprove}
+            onRevert={onRevertImprove}
+          />
           <button className="btn-ghost plan-review-run" onClick={onRun}>
             <RefreshCw size={14} />
             {t.reviewRetry}
@@ -161,6 +188,104 @@ export function ReviewPanel({
         </div>
       )}
     </aside>
+  );
+}
+
+const DIFF_SHOWN = 6;
+
+function DiffLines({ prefix, items, tone }: { prefix: string; items: string[]; tone: string }) {
+  const t = useStrings();
+  if (items.length === 0) return null;
+  const shown = items.slice(0, DIFF_SHOWN);
+  return (
+    <>
+      {shown.map((label) => (
+        <li key={`${prefix}${label}`} className={`diff-${tone} bidi-auto`}>
+          {prefix} {label}
+        </li>
+      ))}
+      {items.length > shown.length && <li>{t.improveMore(items.length - shown.length)}</li>}
+    </>
+  );
+}
+
+/** The "make it better" flow inside the done state: ask, preview the diff, apply or
+ *  discard, and revert after an apply. */
+function ImproveSection({
+  improve,
+  onImprove,
+  onApply,
+  onDiscard,
+  onRevert,
+}: {
+  improve: ImproveState;
+  onImprove: () => void;
+  onApply: () => void;
+  onDiscard: () => void;
+  onRevert: () => void;
+}) {
+  const t = useStrings();
+  return (
+    <div className="plan-improve">
+      {improve.status === "idle" && (
+        <button className="btn plan-review-run" onClick={onImprove}>
+          <Wand2 size={14} />
+          {t.improveBtn}
+        </button>
+      )}
+      {improve.status === "running" && (
+        <div className="plan-review-running" role="status">
+          <LoaderCircle size={16} className="plan-spin" />
+          {t.improveRunning}
+        </div>
+      )}
+      {improve.status === "ready" && (
+        <>
+          <div className="plan-review-label tone-accent">
+            <Wand2 size={13} />
+            {t.improveReadyTitle}
+          </div>
+          <ul className="plan-review-list plan-improve-diff">
+            <DiffLines prefix="+" items={improve.diff.added} tone="add" />
+            <DiffLines prefix="-" items={improve.diff.removed} tone="del" />
+            <DiffLines prefix="~" items={improve.diff.changed} tone="chg" />
+            {improve.diff.edgeDelta !== 0 && <li>{t.improveEdges(improve.diff.edgeDelta)}</li>}
+          </ul>
+          <div className="plan-improve-actions">
+            <button className="btn" onClick={onApply}>
+              {t.improveApply}
+            </button>
+            <button className="btn-ghost" onClick={onDiscard}>
+              {t.improveDiscard}
+            </button>
+          </div>
+        </>
+      )}
+      {improve.status === "applied" && (
+        <>
+          <div className="plan-improve-applied">{t.improveApplied}</div>
+          <button className="btn-ghost plan-review-run" onClick={onRevert}>
+            <RefreshCw size={14} />
+            {t.improveRevert}
+          </button>
+        </>
+      )}
+      {improve.status === "error" && (
+        <>
+          <div className="picker-error">
+            {improve.error === "timeout"
+              ? t.reviewErrTimeout
+              : improve.error === "unparsable"
+                ? t.reviewErrUnparsable
+                : t.reviewErrFailed}
+          </div>
+          <button className="btn-ghost plan-review-run" onClick={onImprove}>
+            <RefreshCw size={14} />
+            {t.reviewRetry}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 

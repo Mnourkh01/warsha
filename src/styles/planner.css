@@ -470,6 +470,40 @@
   color: var(--text);
   font-weight: 600;
 }
+.plan-improve {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-block-start: 10px;
+  border-block-start: 1px solid var(--border);
+}
+.plan-improve-diff {
+  list-style: none;
+  padding-inline-start: 2px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.plan-improve-diff .diff-add {
+  color: var(--ok);
+}
+.plan-improve-diff .diff-del {
+  color: var(--danger);
+}
+.plan-improve-diff .diff-chg {
+  color: var(--accent);
+}
+.plan-improve-actions {
+  display: flex;
+  gap: 8px;
+}
+.plan-improve-actions .btn,
+.plan-improve-actions .btn-ghost {
+  flex: 1;
+}
+.plan-improve-applied {
+  font-size: 12.5px;
+  color: var(--ok);
+}
 .plan-review-raw {
   max-height: 140px;
   overflow: auto;

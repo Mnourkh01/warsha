@@ -269,6 +269,18 @@ const en = {
   reviewErrFailed: "The review could not run. Check that claude works in a terminal.",
   reviewErrUnparsable: "Claude answered in an unexpected format.",
   reviewRetry: "Run again",
+  improveBtn: "Ask Claude to improve it",
+  improveRunning: "Improving the plan... this can take a minute.",
+  improveReadyTitle: "Suggested changes",
+  improveMore: (n: number) => `and ${n} more`,
+  improveEdges: (n: number) =>
+    n > 0
+      ? `${n} new connection${n === 1 ? "" : "s"}`
+      : `${-n} connection${n === -1 ? "" : "s"} removed`,
+  improveApply: "Apply changes",
+  improveDiscard: "Discard",
+  improveApplied: "Plan updated.",
+  improveRevert: "Restore previous plan",
 
   // shortcuts dialog
   keyboardShortcuts: "Keyboard shortcuts",

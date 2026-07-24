@@ -9,8 +9,9 @@ import { usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
 import { useWorkspaces } from "../../store/workspaces";
 import { PlanCanvas } from "./PlanCanvas";
-import { ReviewPanel, type ReviewState } from "./ReviewPanel";
+import { ReviewPanel, type ImproveState, type ReviewState } from "./ReviewPanel";
 import { SendToClaudeModal } from "./SendToClaudeModal";
+import { runPlanImprove } from "./improve";
 import { runPlanReview } from "./review";
 import { planToMarkdown } from "./serializeMarkdown";
 
@@ -29,6 +30,10 @@ export function PlannerView() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [review, setReview] = useState<ReviewState>({ status: "idle" });
+  const [improve, setImprove] = useState<ImproveState>({ status: "idle" });
+  // Bumped after an AI draft is applied or reverted: the canvas owns a working copy,
+  // so an external doc replacement needs a remount to rehydrate from the store.
+  const [canvasEpoch, setCanvasEpoch] = useState(0);
 
   // Create the plan doc on first open. The workspace name only seeds the plan name.
   const wsName = ws?.name ?? "Plan";
@@ -63,12 +68,39 @@ export function PlannerView() {
     const current = usePlans.getState().plans[wsId];
     if (!current || review.status === "running") return;
     setReview({ status: "running" });
+    setImprove({ status: "idle" });
     const outcome = await runPlanReview(planToMarkdown(current, { cwd }));
     setReview(
       "review" in outcome
         ? { status: "done", data: outcome.review }
         : { status: "error", error: outcome.error, raw: outcome.raw },
     );
+  };
+
+  const startImprove = async () => {
+    const current = usePlans.getState().plans[wsId];
+    if (!current || review.status !== "done" || improve.status === "running") return;
+    setImprove({ status: "running" });
+    const outcome = await runPlanImprove(current, review.data.improvements);
+    setImprove(
+      "draft" in outcome
+        ? { status: "ready", draft: outcome.draft, diff: outcome.diff }
+        : { status: "error", error: outcome.error, raw: outcome.raw },
+    );
+  };
+
+  const applyImprove = () => {
+    if (improve.status !== "ready") return;
+    usePlans.getState().applyDoc(wsId, improve.draft);
+    setImprove({ status: "applied" });
+    setCanvasEpoch((e) => e + 1);
+  };
+
+  const revertImprove = () => {
+    if (usePlans.getState().revertDoc(wsId)) {
+      setImprove({ status: "idle" });
+      setCanvasEpoch((e) => e + 1);
+    }
   };
 
   return (
@@ -126,7 +158,7 @@ export function PlannerView() {
         </button>
       </header>
       <PlanCanvas
-        key={wsId}
+        key={`${wsId}:${canvasEpoch}`}
         wsId={wsId}
         previewOpen={previewOpen}
         onClosePreview={() => setPreviewOpen(false)}
@@ -134,7 +166,12 @@ export function PlannerView() {
           reviewOpen ? (
             <ReviewPanel
               state={review}
+              improve={improve}
               onRun={() => void startReview()}
+              onImprove={() => void startImprove()}
+              onApplyImprove={applyImprove}
+              onDiscardImprove={() => setImprove({ status: "idle" })}
+              onRevertImprove={revertImprove}
               onClose={() => setReviewOpen(false)}
             />
           ) : undefined

@@ -203,8 +203,14 @@ interface PlansPersist {
 }
 
 interface PlansState extends PlansPersist {
+  /** One-level undo for AI-applied drafts. Transient: never serialized. */
+  draftBackups: Record<string, PlanDoc>;
   /** Get or create the plan for a workspace (name defaults to the workspace name). */
   ensurePlan: (workspaceId: string, name: string) => PlanDoc;
+  /** Replace the whole doc (an applied AI draft), keeping the old one as backup. */
+  applyDoc: (workspaceId: string, doc: PlanDoc) => void;
+  /** Restore the pre-apply doc. Returns false when there is nothing to restore. */
+  revertDoc: (workspaceId: string) => boolean;
   /** Replace the graph (canvas commits here on every real change). */
   setGraph: (workspaceId: string, nodes: PlanNode[], edges: PlanEdge[]) => void;
   setViewport: (workspaceId: string, viewport: PlanViewport) => void;
@@ -219,6 +225,28 @@ interface PlansState extends PlansPersist {
 
 export const usePlans = create<PlansState>((set, get) => ({
   plans: {},
+  draftBackups: {},
+
+  applyDoc: (workspaceId, doc) =>
+    set((s) => {
+      const current = s.plans[workspaceId];
+      if (!current) return s;
+      return {
+        plans: { ...s.plans, [workspaceId]: doc },
+        draftBackups: { ...s.draftBackups, [workspaceId]: current },
+      };
+    }),
+
+  revertDoc: (workspaceId) => {
+    const backup = get().draftBackups[workspaceId];
+    if (!backup) return false;
+    set((s) => {
+      const draftBackups = { ...s.draftBackups };
+      delete draftBackups[workspaceId];
+      return { plans: { ...s.plans, [workspaceId]: backup }, draftBackups };
+    });
+    return true;
+  },
 
   ensurePlan: (workspaceId, name) => {
     const existing = get().plans[workspaceId];
@@ -292,7 +320,7 @@ export const usePlans = create<PlansState>((set, get) => ({
       const ok = sanitizePlanDoc(doc);
       if (ok) plans[wsId] = ok;
     }
-    set({ plans });
+    set({ plans, draftBackups: {} });
   },
 
   serialize: () => ({ plans: get().plans }),
