@@ -5,6 +5,7 @@ import { useStrings } from "../../lib/i18n";
 import {
   HTTP_METHODS,
   LIST_KINDS,
+  MODEL_KINDS,
   PLAN_PRIORITIES,
   MAX_ACCEPTANCE,
   MAX_ACCEPTANCE_LEN,
@@ -268,6 +269,18 @@ export function Inspector({
           />
         </label>
       )}
+      {(MODEL_KINDS as readonly string[]).includes(node.kind) && (
+        <label className="field">
+          <span className="field-label">{t.inspModel}</span>
+          <input
+            className="input mono"
+            placeholder="claude-sonnet-5"
+            maxLength={60}
+            value={node.model ?? ""}
+            onChange={(e) => onPatch({ model: e.target.value || undefined })}
+          />
+        </label>
+      )}
       {(LIST_KINDS as readonly string[]).includes(node.kind) && (
         <label className="field">
           <span className="field-label">
@@ -275,7 +288,9 @@ export function Inspector({
               ? t.inspOptions
               : node.kind === "test"
                 ? t.inspChecks
-                : t.inspAcceptance}{" "}
+                : node.kind === "agent"
+                  ? t.inspTools
+                  : t.inspAcceptance}{" "}
             <span className="field-hint">{t.inspAcceptanceHint}</span>
           </span>
           <textarea

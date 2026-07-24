@@ -11,6 +11,8 @@ const KIND_ORDER: readonly PlanNodeKind[] = [
   "screen",
   "api",
   "service",
+  "ai",
+  "agent",
   "data",
   "integration",
   "test",
@@ -25,6 +27,8 @@ const KIND_HEADINGS: Record<PlanNodeKind, string> = {
   screen: "Screens",
   api: "API endpoints",
   service: "Services",
+  ai: "AI steps",
+  agent: "Agents",
   data: "Data models",
   integration: "Integrations",
   test: "Tests",
@@ -91,6 +95,7 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     task: "Acceptance",
     decision: "Option",
     test: "Check",
+    agent: "Tool",
   };
 
   const emitItem = (m: PlanNode) => {
@@ -125,6 +130,7 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     }
     const sep = m.kind === "api" ? ": " : " - ";
     push(`- ${box} ${head}${tags}${desc ? `${sep}${desc}` : ""}`);
+    if (m.model) push(`  - Model: ${inline(m.model)}`);
     const prefix = LIST_PREFIX[m.kind];
     if (prefix) {
       for (const a of m.acceptance ?? []) push(`  - ${prefix}: ${inline(a)}`);

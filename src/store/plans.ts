@@ -14,6 +14,8 @@ export const PLAN_NODE_KINDS = [
   "screen",
   "api",
   "service",
+  "ai",
+  "agent",
   "data",
   "integration",
   "test",
@@ -39,10 +41,13 @@ const MAX_OWNER = 80;
 const MAX_DUE = 40;
 const MAX_LINK = 300;
 
-/** Kinds whose list field is meaningful (acceptance criteria / options / checks). */
-export const LIST_KINDS = ["task", "decision", "test"] as const;
+/** Kinds whose list field is meaningful (acceptance / options / checks / tools). */
+export const LIST_KINDS = ["task", "decision", "test", "agent"] as const;
 /** Kinds that carry a path-like field (URL path / screen route). */
 export const PATH_KINDS = ["api", "screen"] as const;
+/** Kinds that carry a model name (AI step, agent). */
+export const MODEL_KINDS = ["ai", "agent"] as const;
+const MAX_MODEL = 60;
 
 // Boundary caps, used on hydrate AND as add-time guards. A max-size plan stays far
 // under the 5 MB Rust state-file cap.
@@ -92,7 +97,9 @@ export interface PlanNode {
   method?: HttpMethod;
   /** api (URL path) and screen (route) */
   path?: string;
-  /** task (acceptance criteria), decision (options), test (checks) */
+  /** ai and agent: which model runs it (free text). */
+  model?: string;
+  /** task (acceptance criteria), decision (options), test (checks), agent (tools) */
   acceptance?: string[];
   /** data only */
   fields?: PlanField[];
@@ -168,6 +175,9 @@ export function sanitizePlanNode(raw: unknown): PlanNode | null {
   }
   if ((PATH_KINDS as readonly string[]).includes(kind)) {
     node.path = cleanStr(r.path, MAX_PATH);
+  }
+  if ((MODEL_KINDS as readonly string[]).includes(kind)) {
+    node.model = cleanStr(r.model, MAX_MODEL);
   }
   if ((LIST_KINDS as readonly string[]).includes(kind)) {
     const list = Array.isArray(r.acceptance) ? r.acceptance : [];

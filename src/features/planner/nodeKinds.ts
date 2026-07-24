@@ -1,4 +1,5 @@
 import {
+  Bot,
   Database,
   FlaskConical,
   GitBranch,
@@ -8,6 +9,7 @@ import {
   Plug,
   Rocket,
   Server,
+  Sparkles,
   SquareCheck,
   StickyNote,
 } from "lucide-react";
@@ -36,6 +38,8 @@ export const NODE_KINDS: NodeKindMeta[] = [
   { kind: "screen", icon: Monitor, group: "build", tint: "pink" },
   { kind: "api", icon: Globe, group: "build", tint: "cyan" },
   { kind: "service", icon: Server, group: "build", tint: "orange" },
+  { kind: "ai", icon: Sparkles, group: "build", tint: "cyan" },
+  { kind: "agent", icon: Bot, group: "build", tint: "pink" },
   { kind: "data", icon: Database, group: "build", tint: "yellow" },
   { kind: "integration", icon: Plug, group: "build", tint: "orange" },
   { kind: "test", icon: FlaskConical, group: "ship", tint: "green" },

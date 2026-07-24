@@ -42,6 +42,10 @@ export function PlanNodeCard({ data, selected }: NodeProps<PlanFlowNode>) {
         <div className="plan-node-sub mono">{`${n.method ?? "GET"} ${n.path ?? "/"}`}</div>
       ) : n.kind === "screen" && n.path ? (
         <div className="plan-node-sub mono">{n.path}</div>
+      ) : (n.kind === "ai" || n.kind === "agent") && n.model ? (
+        <div className="plan-node-sub mono">{n.model}</div>
+      ) : n.kind === "agent" && n.acceptance?.length ? (
+        <div className="plan-node-sub">{t.planListCount(n.acceptance.length)}</div>
       ) : n.kind === "data" && n.fields?.length ? (
         <div className="plan-node-sub">{t.planFieldCount(n.fields.length)}</div>
       ) : n.kind === "task" && n.acceptance?.length ? (

@@ -118,6 +118,18 @@ describe("sanitizePlanDoc", () => {
     expect(byId.get("d")?.effort).toBe("m");
     expect(byId.get("q")?.acceptance).toEqual(["boots"]);
     expect(byId.get("s")?.path).toBe("/login");
+    const withAi = sanitizePlanDoc(
+      doc({
+        nodes: [
+          node("ag", { kind: "agent", model: "claude-sonnet-5", acceptance: ["firecrawl"] }),
+          node("t", { model: "gpt-x" as never }), // model is ai/agent-only
+        ],
+      }),
+    );
+    const aiById = new Map(withAi?.nodes.map((n) => [n.id, n]));
+    expect(aiById.get("ag")?.model).toBe("claude-sonnet-5");
+    expect(aiById.get("ag")?.acceptance).toEqual(["firecrawl"]);
+    expect(aiById.get("t")?.model).toBeUndefined();
     expect(byId.get("bad")?.status).toBeUndefined();
     expect(byId.get("bad")?.effort).toBeUndefined();
   });

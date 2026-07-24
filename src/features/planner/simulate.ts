@@ -42,6 +42,7 @@ function nodeLine(n: PlanNode, phaseLabelById: Map<string, string>): string {
   if (phase) bits.push(`phase: ${phase}`);
   if (n.kind === "api") bits.push(`${n.method ?? "GET"} ${n.path ?? "/"}`);
   else if (n.path) bits.push(`route: ${n.path}`);
+  if (n.model) bits.push(`model: ${n.model}`);
   if (n.status) bits.push(n.status === "done" ? "already done" : "in progress");
   if (n.effort) bits.push(`effort: ${n.effort.toUpperCase()}`);
   if (n.priority) bits.push(`priority: ${n.priority}`);

@@ -166,6 +166,25 @@ describe("planToMarkdown", () => {
     expect(md).toContain("- [ ] **Login** `/login`");
     expect(md).toContain("### Deploy steps");
     expect(md).toContain("### Integrations");
+    const ai = planToMarkdown(
+      doc({
+        nodes: [
+          node("ag1", {
+            kind: "agent",
+            label: "Support bot",
+            model: "claude-sonnet-5",
+            acceptance: ["firecrawl", "db-query"],
+          }),
+          node("ai1", { kind: "ai", label: "Summarize ticket", model: "claude-haiku-4-5" }),
+        ],
+      }),
+    );
+    expect(ai).toContain("### Agents");
+    expect(ai).toContain("- [ ] **Support bot**");
+    expect(ai).toContain("  - Model: claude-sonnet-5");
+    expect(ai).toContain("  - Tool: firecrawl");
+    expect(ai).toContain("### AI steps");
+    expect(ai).toContain("  - Model: claude-haiku-4-5");
   });
 
   it("never emits trailing spaces or triple blank lines", () => {
