@@ -42,6 +42,52 @@ export function dependsOf(nodeId: string, edges: readonly PlanEdge[]): string[] 
   return edges.filter((e) => e.target === nodeId).map((e) => e.source);
 }
 
+/** Ids on (one of) the longest dependency chains - the critical path. Deterministic:
+ *  ties resolve toward the (label, id) ordering used everywhere else. Cyclic leftovers
+ *  are ignored (they have no defined chain length). */
+export function criticalPathIds(
+  nodes: readonly PlanNode[],
+  edges: readonly PlanEdge[],
+): Set<string> {
+  const { order } = topoSortNodes(nodes, edges);
+  if (order.length === 0) return new Set();
+  const ids = new Set(order.map((n) => n.id));
+  const depth = new Map<string, number>();
+  const parent = new Map<string, string | null>();
+  for (const n of order) {
+    depth.set(n.id, 0);
+    parent.set(n.id, null);
+  }
+  // order is topological, so every source is finalized before its targets.
+  for (const n of order) {
+    const d = depth.get(n.id) ?? 0;
+    for (const e of edges) {
+      if (e.source !== n.id || !ids.has(e.target)) continue;
+      if (d + 1 > (depth.get(e.target) ?? 0)) {
+        depth.set(e.target, d + 1);
+        parent.set(e.target, n.id);
+      }
+    }
+  }
+  let tail: string | null = null;
+  let best = -1;
+  for (const n of order) {
+    const d = depth.get(n.id) ?? 0;
+    if (d > best) {
+      best = d;
+      tail = n.id;
+    }
+  }
+  const path = new Set<string>();
+  // A single node with no edges is not a "path" worth flagging.
+  if (best < 1) return path;
+  while (tail) {
+    path.add(tail);
+    tail = parent.get(tail) ?? null;
+  }
+  return path;
+}
+
 /** Deterministic Kahn topo sort of `nodes` using only edges BETWEEN them. Ready ties
  *  break by (label, id). Nodes stuck in a cycle come back in `cyclic` (same sort) so
  *  callers can flag them instead of dropping them - hydrated data is untrusted even

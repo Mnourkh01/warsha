@@ -33,11 +33,13 @@ import {
   type PlanNode,
   type PlanNodeKind,
 } from "../../store/plans";
-import { compareNodes, topoSortNodes, wouldCreateCycle } from "./graph";
+import { compareNodes, criticalPathIds, topoSortNodes, wouldCreateCycle } from "./graph";
 import { KIND_META, PLAN_NODE_MIME } from "./nodeKinds";
 import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
-import { RunPreview } from "./RunPreview";
+import { RunPreview, type SimPanelPhase } from "./RunPreview";
+import type { ReviewError } from "./review";
+import type { PlanSimulation } from "./simulate";
 import { PlanNodeCard, type PlanFlowNode } from "./nodes/PlanNodeCard";
 
 const nodeTypes = { plan: PlanNodeCard };
@@ -78,6 +80,11 @@ interface CanvasProps {
   wsId: string;
   previewOpen: boolean;
   onClosePreview: () => void;
+  /** Simulation state owned by PlannerView (cached against doc.updatedAt there). */
+  simPhase: "idle" | "running" | "ready" | "error";
+  simData?: PlanSimulation;
+  simError?: ReviewError;
+  onRerunSim: () => void;
   /** Rendered instead of preview/inspector when set (the AI review panel). */
   sidePanel?: ReactNode;
 }
@@ -90,7 +97,16 @@ export function PlanCanvas(props: CanvasProps) {
   );
 }
 
-function CanvasInner({ wsId, previewOpen, onClosePreview, sidePanel }: CanvasProps) {
+function CanvasInner({
+  wsId,
+  previewOpen,
+  onClosePreview,
+  simPhase,
+  simData,
+  simError,
+  onRerunSim,
+  sidePanel,
+}: CanvasProps) {
   const t = useStrings();
   const { screenToFlowPosition, setCenter, getZoom } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -224,6 +240,14 @@ function CanvasInner({ wsId, previewOpen, onClosePreview, sidePanel }: CanvasPro
     .filter((n) => n.data.plan.kind === "phase")
     .map((n) => n.data.plan)
     .sort(compareNodes);
+  const criticalIds = useMemo(
+    () =>
+      criticalPathIds(
+        nodes.map((n) => n.data.plan),
+        edges.map(toPlanEdge),
+      ),
+    [nodes, edges],
+  );
 
   // ---- run preview: dependency-ordered walkthrough of the whole graph ----
   const [stepIndex, setStepIndex] = useState(0);
@@ -236,14 +260,16 @@ function CanvasInner({ wsId, previewOpen, onClosePreview, sidePanel }: CanvasPro
     return { steps: [...order, ...cyclic], cyclicIds: new Set(cyclic.map((c) => c.id)) };
   }, [nodes, edges]);
 
+  // The walkthrough starts only after the simulation settles: with AI content when it
+  // succeeded, plain when it could not run.
   useEffect(() => {
-    if (previewOpen) {
+    if (previewOpen && (simPhase === "ready" || simPhase === "error")) {
       setStepIndex(0);
       setPlaying(true);
     } else {
       setPlaying(false);
     }
-  }, [previewOpen]);
+  }, [previewOpen, simPhase]);
 
   useEffect(() => {
     setStepIndex((i) => Math.min(i, Math.max(0, preview.steps.length - 1)));
@@ -261,16 +287,32 @@ function CanvasInner({ wsId, previewOpen, onClosePreview, sidePanel }: CanvasPro
     if (playing && stepIndex >= preview.steps.length - 1) setPlaying(false);
   }, [playing, stepIndex, preview.steps.length]);
 
-  // Highlight the active step's node and glide the viewport to it.
+  // Highlight the active step's node, reveal simulation status badges as the run
+  // reaches each step, and glide the viewport along.
   const activeStepId = previewOpen ? (preview.steps[stepIndex]?.id ?? null) : null;
+  const simSteps = previewOpen && simPhase === "ready" ? simData?.steps : undefined;
   useEffect(() => {
-    setNodes((ns) =>
-      ns.map((n) => {
-        const cls = n.id === activeStepId ? "step-active" : undefined;
-        return n.className === cls ? n : { ...n, className: cls };
-      }),
-    );
-  }, [activeStepId, setNodes]);
+    const position = new Map(preview.steps.map((s, i) => [s.id, i]));
+    setNodes((ns) => {
+      // Bail out with the SAME array when no class changed: this effect's deps derive
+      // from `nodes`, so returning a fresh array unconditionally would loop forever.
+      let changed = false;
+      const next = ns.map((n) => {
+        const parts: string[] = [];
+        if (n.id === activeStepId) parts.push("step-active");
+        if (simSteps) {
+          const p = position.get(n.id);
+          const st = simSteps[n.id];
+          if (st && p !== undefined && p <= stepIndex) parts.push(`sim-${st.status}`);
+        }
+        const cls = parts.length > 0 ? parts.join(" ") : undefined;
+        if (n.className === cls) return n;
+        changed = true;
+        return { ...n, className: cls };
+      });
+      return changed ? next : ns;
+    });
+  }, [activeStepId, stepIndex, simSteps, preview.steps, setNodes]);
 
   useEffect(() => {
     if (!activeStepId) return;
@@ -318,6 +360,10 @@ function CanvasInner({ wsId, previewOpen, onClosePreview, sidePanel }: CanvasPro
         <RunPreview
           steps={preview.steps}
           cyclicIds={preview.cyclicIds}
+          criticalIds={criticalIds}
+          sim={(simPhase === "idle" ? "running" : simPhase) as SimPanelPhase}
+          simData={simData}
+          simError={simError}
           index={stepIndex}
           playing={playing}
           onTogglePlay={() => setPlaying((p) => !p)}
@@ -329,6 +375,7 @@ function CanvasInner({ wsId, previewOpen, onClosePreview, sidePanel }: CanvasPro
             setStepIndex(0);
             setPlaying(true);
           }}
+          onRerunSim={onRerunSim}
           onClose={onClosePreview}
         />
       ) : (

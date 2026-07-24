@@ -12,7 +12,8 @@ import { PlanCanvas } from "./PlanCanvas";
 import { ReviewPanel, type ImproveState, type ReviewState } from "./ReviewPanel";
 import { SendToClaudeModal } from "./SendToClaudeModal";
 import { runPlanImprove } from "./improve";
-import { runPlanReview } from "./review";
+import { runPlanReview, type ReviewError } from "./review";
+import { runPlanSimulation, type PlanSimulation } from "./simulate";
 import { planToMarkdown } from "./serializeMarkdown";
 
 /** Full-workspace planner mode: toolbar + palette/canvas/inspector + send modal.
@@ -28,6 +29,14 @@ export function PlannerView() {
   const setPlanSend = useUI((s) => s.setPlanSend);
   const [copied, setCopied] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Simulation cache: valid for the doc revision it ran against; a changed plan
+  // triggers a fresh run on the next Run press.
+  const [sim, setSim] = useState<{
+    status: "idle" | "running" | "ready" | "error";
+    data?: PlanSimulation;
+    error?: ReviewError;
+    forUpdatedAt?: number;
+  }>({ status: "idle" });
   const [reviewOpen, setReviewOpen] = useState(false);
   const [review, setReview] = useState<ReviewState>({ status: "idle" });
   const [improve, setImprove] = useState<ImproveState>({ status: "idle" });
@@ -61,6 +70,27 @@ export function PlannerView() {
     } catch (e) {
       console.warn("plan markdown copy failed", e);
     }
+  };
+
+  const doSim = async () => {
+    const current = usePlans.getState().plans[wsId];
+    if (!current) return;
+    setSim({ status: "running" });
+    const outcome = await runPlanSimulation(current);
+    setSim(
+      "sim" in outcome
+        ? { status: "ready", data: outcome.sim, forUpdatedAt: current.updatedAt }
+        : { status: "error", error: outcome.error },
+    );
+  };
+
+  const runPlan = () => {
+    setReviewOpen(false);
+    setPreviewOpen(true);
+    const current = usePlans.getState().plans[wsId];
+    if (!current || sim.status === "running") return;
+    if (sim.status === "ready" && sim.forUpdatedAt === current.updatedAt) return;
+    void doSim();
   };
 
   // One review in flight at a time; the answer replaces the panel content in place.
@@ -122,8 +152,8 @@ export function PlannerView() {
           className="btn-ghost"
           disabled={doc.nodes.length === 0}
           onClick={() => {
-            setReviewOpen(false);
-            setPreviewOpen((p) => !p);
+            if (previewOpen) setPreviewOpen(false);
+            else runPlan();
           }}
         >
           <Play size={14} />
@@ -162,6 +192,10 @@ export function PlannerView() {
         wsId={wsId}
         previewOpen={previewOpen}
         onClosePreview={() => setPreviewOpen(false)}
+        simPhase={sim.status}
+        simData={sim.data}
+        simError={sim.error}
+        onRerunSim={() => void doSim()}
         sidePanel={
           reviewOpen ? (
             <ReviewPanel

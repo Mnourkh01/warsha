@@ -341,6 +341,135 @@
   border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent);
   color: var(--danger);
 }
+.plan-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: transparent;
+}
+.plan-step-dot.st-ok {
+  background: var(--ok);
+}
+.plan-step-dot.st-risky {
+  background: var(--tint-orange);
+}
+.plan-step-dot.st-blocked {
+  background: var(--danger);
+}
+.plan-step-crit {
+  flex: none;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+}
+/* Verdict + confidence once the simulation lands */
+.plan-sim-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.plan-sim-conf {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.plan-sim-conf.c-high {
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.plan-sim-conf.c-medium {
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+}
+.plan-sim-conf.c-low {
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.plan-sim-verdict-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+/* Active step's simulation detail */
+.plan-sim-card {
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--ok);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-sim-card.st-risky {
+  border-inline-start-color: var(--tint-orange);
+}
+.plan-sim-card.st-blocked {
+  border-inline-start-color: var(--danger);
+}
+.plan-sim-happens {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.plan-sim-watch {
+  margin: 0;
+  display: flex;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.plan-sim-watch > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--danger);
+}
+.plan-sim-fix {
+  color: var(--text-faint);
+}
+.plan-sim-noai {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Node status badges revealed as the run reaches each step */
+.plan-node {
+  position: relative;
+}
+.planner .react-flow__node.sim-ok .plan-node::after,
+.planner .react-flow__node.sim-risky .plan-node::after,
+.planner .react-flow__node.sim-blocked .plan-node::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  inset-inline-end: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-app);
+}
+.planner .react-flow__node.sim-ok .plan-node::after {
+  background: var(--ok);
+}
+.planner .react-flow__node.sim-risky .plan-node::after {
+  background: var(--tint-orange);
+}
+.planner .react-flow__node.sim-blocked .plan-node::after {
+  background: var(--danger);
+}
+
 .plan-preview-controls {
   display: flex;
   align-items: center;

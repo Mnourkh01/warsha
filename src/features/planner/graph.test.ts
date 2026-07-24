@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlanEdge, PlanNode } from "../../store/plans";
-import { dependsOf, topoSortNodes, wouldCreateCycle } from "./graph";
+import { criticalPathIds, dependsOf, topoSortNodes, wouldCreateCycle } from "./graph";
 
 function node(id: string, label = id): PlanNode {
   return { id, kind: "phase", x: 0, y: 0, label };
@@ -72,5 +72,30 @@ describe("topoSortNodes", () => {
     const edges = [edge("outside", "a"), edge("a", "b")];
     const { order } = topoSortNodes(nodes, edges);
     expect(order.map((n) => n.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("criticalPathIds", () => {
+  it("flags the longest dependency chain, not bystanders", () => {
+    const nodes = [node("a"), node("b"), node("c"), node("lone")];
+    const edges = [edge("a", "b"), edge("b", "c")];
+    const path = criticalPathIds(nodes, edges);
+    expect([...path].sort()).toEqual(["a", "b", "c"]);
+    expect(path.has("lone")).toBe(false);
+  });
+
+  it("picks one full branch through a diamond, deterministically", () => {
+    const nodes = [node("s"), node("l", "Left"), node("r", "Right"), node("e")];
+    const edges = [edge("s", "l"), edge("s", "r"), edge("l", "e"), edge("r", "e")];
+    const path = criticalPathIds(nodes, edges);
+    expect(path.size).toBe(3); // s -> one middle -> e
+    expect(path.has("s")).toBe(true);
+    expect(path.has("e")).toBe(true);
+    expect(criticalPathIds(nodes, edges)).toEqual(path); // stable across calls
+  });
+
+  it("returns empty for no edges or no nodes", () => {
+    expect(criticalPathIds([node("a")], []).size).toBe(0);
+    expect(criticalPathIds([], []).size).toBe(0);
   });
 });
