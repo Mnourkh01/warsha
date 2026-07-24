@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ClipboardCheck, FileDown, Send, Workflow } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, FileDown, Play, Send, Workflow } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "../../styles/planner.css";
 import { clipboardWriteText } from "../../lib/ipc";
@@ -24,6 +24,7 @@ export function PlannerView() {
   const sendOpen = useUI((s) => s.planSendOpen);
   const setPlanSend = useUI((s) => s.setPlanSend);
   const [copied, setCopied] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // Create the plan doc on first open. The workspace name only seeds the plan name.
   const wsName = ws?.name ?? "Plan";
@@ -68,6 +69,14 @@ export function PlannerView() {
         />
         <span className="planner-count">{t.planNodeCount(doc.nodes.length)}</span>
         <span className="spacer" />
+        <button
+          className="btn-ghost"
+          disabled={doc.nodes.length === 0}
+          onClick={() => setPreviewOpen((p) => !p)}
+        >
+          <Play size={14} />
+          {t.previewRun}
+        </button>
         <button className="btn-ghost" onClick={() => void exportMarkdown()}>
           {copied ? <ClipboardCheck size={14} /> : <FileDown size={14} />}
           {copied ? t.exportCopied : t.exportMarkdown}
@@ -85,7 +94,12 @@ export function PlannerView() {
           {t.closePlanner}
         </button>
       </header>
-      <PlanCanvas key={wsId} wsId={wsId} />
+      <PlanCanvas
+        key={wsId}
+        wsId={wsId}
+        previewOpen={previewOpen}
+        onClosePreview={() => setPreviewOpen(false)}
+      />
       {sendOpen && <SendToClaudeModal wsId={wsId} cwd={cwd} onClose={() => setPlanSend(false)} />}
     </div>
   );

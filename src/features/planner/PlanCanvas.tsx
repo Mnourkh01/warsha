@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   Background,
   Controls,
@@ -25,10 +25,11 @@ import {
   type PlanNode,
   type PlanNodeKind,
 } from "../../store/plans";
-import { compareNodes, wouldCreateCycle } from "./graph";
+import { compareNodes, topoSortNodes, wouldCreateCycle } from "./graph";
 import { KIND_META, PLAN_NODE_MIME } from "./nodeKinds";
 import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
+import { RunPreview } from "./RunPreview";
 import { PlanNodeCard, type PlanFlowNode } from "./nodes/PlanNodeCard";
 
 const nodeTypes = { plan: PlanNodeCard };
@@ -65,17 +66,23 @@ function toPlanEdge(e: Edge): PlanEdge {
 /** The canvas owns the working copy (xyflow state); every real change is committed to
  *  the plans store, which persistence then debounces to disk. Remounted per workspace
  *  via key={wsId} in PlannerView. */
-export function PlanCanvas({ wsId }: { wsId: string }) {
+interface CanvasProps {
+  wsId: string;
+  previewOpen: boolean;
+  onClosePreview: () => void;
+}
+
+export function PlanCanvas(props: CanvasProps) {
   return (
     <ReactFlowProvider>
-      <CanvasInner wsId={wsId} />
+      <CanvasInner {...props} />
     </ReactFlowProvider>
   );
 }
 
-function CanvasInner({ wsId }: { wsId: string }) {
+function CanvasInner({ wsId, previewOpen, onClosePreview }: CanvasProps) {
   const t = useStrings();
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, setCenter, getZoom } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Hydrate the working copy once from the store; PlannerView guarantees the doc
@@ -208,6 +215,66 @@ function CanvasInner({ wsId }: { wsId: string }) {
     .map((n) => n.data.plan)
     .sort(compareNodes);
 
+  // ---- run preview: dependency-ordered walkthrough of the whole graph ----
+  const [stepIndex, setStepIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const preview = useMemo(() => {
+    const { order, cyclic } = topoSortNodes(
+      nodes.map((n) => n.data.plan),
+      edges.map(toPlanEdge),
+    );
+    return { steps: [...order, ...cyclic], cyclicIds: new Set(cyclic.map((c) => c.id)) };
+  }, [nodes, edges]);
+
+  useEffect(() => {
+    if (previewOpen) {
+      setStepIndex(0);
+      setPlaying(true);
+    } else {
+      setPlaying(false);
+    }
+  }, [previewOpen]);
+
+  useEffect(() => {
+    setStepIndex((i) => Math.min(i, Math.max(0, preview.steps.length - 1)));
+  }, [preview.steps.length]);
+
+  useEffect(() => {
+    if (!previewOpen || !playing) return;
+    const timer = setInterval(() => {
+      setStepIndex((i) => Math.min(i + 1, preview.steps.length - 1));
+    }, 1100);
+    return () => clearInterval(timer);
+  }, [previewOpen, playing, preview.steps.length]);
+
+  useEffect(() => {
+    if (playing && stepIndex >= preview.steps.length - 1) setPlaying(false);
+  }, [playing, stepIndex, preview.steps.length]);
+
+  // Highlight the active step's node and glide the viewport to it.
+  const activeStepId = previewOpen ? (preview.steps[stepIndex]?.id ?? null) : null;
+  useEffect(() => {
+    setNodes((ns) =>
+      ns.map((n) => {
+        const cls = n.id === activeStepId ? "step-active" : undefined;
+        return n.className === cls ? n : { ...n, className: cls };
+      }),
+    );
+  }, [activeStepId, setNodes]);
+
+  useEffect(() => {
+    if (!activeStepId) return;
+    const node = nodes.find((n) => n.id === activeStepId);
+    if (!node) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    void setCenter(node.position.x + 90, node.position.y + 30, {
+      duration: reduce ? 0 : 350,
+      zoom: getZoom(),
+    });
+    // Pan only when the STEP changes, not on unrelated node-state churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStepId]);
+
   return (
     <div className="planner-body">
       <Palette onAdd={addAtCenter} />
@@ -235,14 +302,33 @@ function CanvasInner({ wsId }: { wsId: string }) {
         </ReactFlow>
         {nodes.length === 0 && <div className="plan-empty-hint">{t.planEmptyHint}</div>}
       </div>
-      {selected && (
-        <Inspector
-          key={selected.id}
-          node={selected.data.plan}
-          phases={phases}
-          onPatch={(patch) => patchNode(selected.id, patch)}
-          onDelete={() => deleteNode(selected.id)}
+      {previewOpen ? (
+        <RunPreview
+          steps={preview.steps}
+          cyclicIds={preview.cyclicIds}
+          index={stepIndex}
+          playing={playing}
+          onTogglePlay={() => setPlaying((p) => !p)}
+          onStep={(delta) => {
+            setPlaying(false);
+            setStepIndex((i) => Math.max(0, Math.min(i + delta, preview.steps.length - 1)));
+          }}
+          onRestart={() => {
+            setStepIndex(0);
+            setPlaying(true);
+          }}
+          onClose={onClosePreview}
         />
+      ) : (
+        selected && (
+          <Inspector
+            key={selected.id}
+            node={selected.data.plan}
+            phases={phases}
+            onPatch={(patch) => patchNode(selected.id, patch)}
+            onDelete={() => deleteNode(selected.id)}
+          />
+        )
       )}
     </div>
   );

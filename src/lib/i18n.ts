@@ -240,6 +240,17 @@ const en = {
   cmdClosePlanner: "Close the project planner",
   cmdSendPlan: "Send plan to Claude Code",
   scPlanner: "Toggle the project planner",
+  previewRun: "Preview run",
+  previewTitle: "Run preview",
+  previewClose: "Close preview",
+  previewStepOf: (i: number, n: number) => `Step ${i} of ${n}`,
+  previewPlay: "Play",
+  previewPause: "Pause",
+  previewNext: "Next step",
+  previewPrev: "Previous step",
+  previewRestart: "Restart preview",
+  previewCycle: "cycle",
+  previewHint: "Steps follow the dependency arrows: a block runs after everything pointing into it.",
 
   // shortcuts dialog
   keyboardShortcuts: "Keyboard shortcuts",
