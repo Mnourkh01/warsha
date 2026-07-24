@@ -330,3 +330,32 @@
 .planner .react-flow__attribution a {
   color: var(--text-faint);
 }
+
+/* ---- edges: direction + life ---- */
+/* Arrowhead color comes from the markerEnd option in PlanCanvas (inline style);
+   markers live in shared defs so they cannot follow per-edge hover states. */
+.planner .react-flow__edge-path {
+  transition: stroke 0.12s ease;
+}
+.planner .react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--accent);
+}
+/* Slow drift along the dependency direction; functional motion, not decoration. */
+.planner .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 7 5;
+  animation: plan-edge-flow 0.9s linear infinite;
+}
+@keyframes plan-edge-flow {
+  from {
+    stroke-dashoffset: 12;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planner .react-flow__edge.animated .react-flow__edge-path {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}

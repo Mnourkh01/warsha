@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import {
   Background,
   Controls,
+  MarkerType,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
@@ -36,9 +37,24 @@ function toFlowNode(n: PlanNode, selected: boolean): PlanFlowNode {
   return { id: n.id, type: "plan", position: { x: n.x, y: n.y }, data: { plan: n }, selected };
 }
 
+// Dependency edges read source to target: arrowhead shows direction, the slow dash
+// flow shows "this feeds into that". Applied to connect-time edges via
+// defaultEdgeOptions and to hydrated edges via toFlowEdge.
+const edgeOptions = {
+  animated: true,
+  // color lands in the marker's inline style, where the CSS var still resolves -
+  // stylesheet rules cannot reach it (xyflow writes a hardcoded inline fill).
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    width: 16,
+    height: 16,
+    color: "var(--border-strong)",
+  },
+};
+
 function toFlowEdge(e: PlanEdge): Edge {
   // The (v2) edge label rides in data so a round-trip never loses it.
-  return { id: e.id, source: e.source, target: e.target, data: { label: e.label } };
+  return { id: e.id, source: e.source, target: e.target, data: { label: e.label }, ...edgeOptions };
 }
 
 function toPlanEdge(e: Edge): PlanEdge {
@@ -123,8 +139,8 @@ function CanvasInner({ wsId }: { wsId: string }) {
       const center = rect
         ? screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
         : { x: 0, y: 0 };
-      // Small stagger so repeated clicks do not stack blocks exactly on top of each other.
-      const step = (nodes.length % 5) * 16;
+      // Cascade so repeated clicks land readable, not stacked (card is ~150x60).
+      const step = (nodes.length % 5) * 40;
       addNode(kind, { x: center.x - 80 + step, y: center.y - 20 + step });
     },
     [screenToFlowPosition, addNode, nodes.length],
@@ -206,6 +222,7 @@ function CanvasInner({ wsId }: { wsId: string }) {
           isValidConnection={isValidConnection}
           onDrop={onDrop}
           onDragOver={onDragOver}
+          defaultEdgeOptions={edgeOptions}
           defaultViewport={init.viewport}
           onMoveEnd={(_, viewport) => usePlans.getState().setViewport(wsId, viewport)}
           deleteKeyCode={["Delete", "Backspace"]}
