@@ -8,6 +8,7 @@ import {
   Palette,
   PanelLeft,
   Plus,
+  RadioTower,
   RotateCw,
   Search,
   Settings as SettingsIcon,
@@ -46,6 +47,7 @@ export function CommandPalette() {
   const workspaces = useWorkspaces((s) => s.workspaces);
   const sessions = useWorkspaces((s) => s.sessions);
   const templates = useTemplates((s) => s.templates);
+  const broadcast = useUI((s) => s.broadcast);
   const activeSessionId = useWorkspaces((s) => s.activeSessionId);
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
@@ -149,6 +151,13 @@ export function CommandPalette() {
         run: () => bumpFontSize(-1),
       },
       {
+        id: "toggle-broadcast",
+        label: broadcast ? t.cmdBroadcastOff : t.cmdBroadcastOn,
+        icon: <RadioTower size={15} />,
+        hint: "Ctrl+Shift+I",
+        run: () => useUI.getState().toggleBroadcast(),
+      },
+      {
         id: "toggle-sidebar",
         label: t.cmdToggleSidebar,
         icon: <PanelLeft size={15} />,
@@ -200,7 +209,7 @@ export function CommandPalette() {
     }));
 
     return [...base, ...wsCmds, ...tplCmds, ...openers];
-  }, [workspaces, sessions, templates, activeSessionId, theme, setTheme, setSettings, t]);
+  }, [workspaces, sessions, templates, broadcast, activeSessionId, theme, setTheme, setSettings, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

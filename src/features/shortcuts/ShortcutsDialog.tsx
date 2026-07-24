@@ -9,6 +9,7 @@ const SHORTCUTS: { chord: string; action: (t: Strings) => string }[] = [
   { chord: "Ctrl+Shift+B", action: (t) => t.scSidebar },
   { chord: "Ctrl+Shift+F", action: (t) => t.scFind },
   { chord: "Ctrl+Shift+M", action: (t) => t.scMaximize },
+  { chord: "Ctrl+Shift+I", action: (t) => t.scBroadcast },
   { chord: "Ctrl+Shift+C", action: (t) => t.scCopy },
   { chord: "Ctrl+V / Ctrl+Shift+V", action: (t) => t.scPaste },
   { chord: "Escape", action: (t) => t.scEscape },

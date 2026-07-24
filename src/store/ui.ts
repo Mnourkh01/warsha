@@ -13,6 +13,9 @@ interface UIState {
   maximizedSessionId: string | null;
   /** Find bar over the ACTIVE session's pane. */
   findOpen: boolean;
+  /** Broadcast typing to every session in the active workspace. Transient by design:
+   *  never persisted, and cleared on any workspace switch (see actions.ts). */
+  broadcast: boolean;
   setPalette: (v: boolean) => void;
   setSettings: (v: boolean) => void;
   setNewSession: (v: boolean) => void;
@@ -23,6 +26,8 @@ interface UIState {
   setMaximized: (id: string | null) => void;
   toggleMaximized: (id: string) => void;
   setFind: (v: boolean) => void;
+  setBroadcast: (v: boolean) => void;
+  toggleBroadcast: () => void;
 }
 
 export const useUI = create<UIState>((set) => ({
@@ -34,6 +39,7 @@ export const useUI = create<UIState>((set) => ({
   sidebarWidth: 264,
   maximizedSessionId: null,
   findOpen: false,
+  broadcast: false,
   setPalette: (paletteOpen) => set({ paletteOpen }),
   setSettings: (settingsOpen) => set({ settingsOpen }),
   setNewSession: (newSessionOpen) => set({ newSessionOpen }),
@@ -46,4 +52,6 @@ export const useUI = create<UIState>((set) => ({
   toggleMaximized: (id) =>
     set((s) => ({ maximizedSessionId: s.maximizedSessionId === id ? null : id })),
   setFind: (findOpen) => set({ findOpen }),
+  setBroadcast: (broadcast) => set({ broadcast }),
+  toggleBroadcast: () => set((s) => ({ broadcast: !s.broadcast })),
 }));

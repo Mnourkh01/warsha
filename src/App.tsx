@@ -181,6 +181,12 @@ export default function App() {
         e.stopPropagation();
         const sid = useWorkspaces.getState().activeSessionId;
         if (sid) ui.toggleMaximized(sid);
+      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "i") {
+        // Broadcast typing to the whole workspace. Shift chord so plain Ctrl+I (Tab in
+        // some TUIs) still reaches the terminal.
+        e.preventDefault();
+        e.stopPropagation();
+        ui.toggleBroadcast();
       } else if (e.key === "Escape") {
         // Close topmost-first, one layer per press. (The find bar handles its own
         // Escape while its input is focused; this covers focus elsewhere.)

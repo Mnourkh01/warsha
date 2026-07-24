@@ -123,6 +123,7 @@ export function changeSessionFolder(id: string, cwd: string): void {
 }
 
 export function newWorkspace(): string {
+  useUI.getState().setBroadcast(false);
   return useWorkspaces.getState().addWorkspace();
 }
 
@@ -131,6 +132,7 @@ export function newWorkspace(): string {
 export function openTemplate(templateId: string): string | null {
   const tpl = useTemplates.getState().templates.find((t) => t.id === templateId);
   if (!tpl) return null;
+  useUI.getState().setBroadcast(false);
   const ws = useWorkspaces.getState();
   const wsId = ws.addWorkspace(tpl.name);
   if (tpl.defaultCwd) ws.setWorkspaceCwd(wsId, tpl.defaultCwd);
@@ -141,13 +143,18 @@ export function openTemplate(templateId: string): string | null {
 }
 
 export function switchWorkspace(id: string): void {
+  // Broadcast never follows a workspace change: typing into shells the user is no
+  // longer looking at is exactly the accident the auto-off prevents.
+  if (useWorkspaces.getState().activeWorkspaceId !== id) useUI.getState().setBroadcast(false);
   useWorkspaces.getState().setActiveWorkspace(id);
 }
 
 export function deleteWorkspace(id: string): void {
+  const wasActive = useWorkspaces.getState().activeWorkspaceId === id;
   const removed = useWorkspaces.getState().removeWorkspace(id);
   const runtime = useRuntime.getState();
   const ui = useUI.getState();
+  if (wasActive) ui.setBroadcast(false);
   for (const sid of removed) {
     if (ui.maximizedSessionId === sid) ui.setMaximized(null);
     void disposeTerminal(sid);

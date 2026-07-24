@@ -22,6 +22,7 @@ import {
 } from "../../lib/ipc";
 import type { ShellKind } from "../../lib/types";
 import { useRuntime } from "../../store/runtime";
+import { inputTargets } from "./broadcast";
 import { dropTracking, noteOutput } from "./attention";
 import { shapeArabicVisual } from "./arabicGlyphs";
 import { ExtraLinksProvider } from "./links";
@@ -114,17 +115,21 @@ class TerminalController {
     this.term.registerLinkProvider(new ExtraLinksProvider(this.term));
 
     this.term.onData((data) => {
+      // Normally [own id]; with broadcast on, every session in the active workspace.
       // Dead-session rejections stay silent (the exit notice is already printed), but a
-      // FULL input queue means a stalled child is eating keystrokes; say so, throttled.
-      void ptyWrite(this.sessionId, data).catch((err: unknown) => {
-        if (!String(err).startsWith("queue_full:")) return;
-        const now = Date.now();
-        if (now - this.lastQueueFullNotice < 2000) return;
-        this.lastQueueFullNotice = now;
-        this.term.write(
-          "\r\n\x1b[33m[warsha] session is not accepting input, the program looks stuck\x1b[0m\r\n",
-        );
-      });
+      // FULL input queue on THIS session means a stalled child is eating keystrokes;
+      // say so, throttled. Sibling errors stay silent - their own pane reports them.
+      for (const id of inputTargets(this.sessionId)) {
+        void ptyWrite(id, data).catch((err: unknown) => {
+          if (id !== this.sessionId || !String(err).startsWith("queue_full:")) return;
+          const now = Date.now();
+          if (now - this.lastQueueFullNotice < 2000) return;
+          this.lastQueueFullNotice = now;
+          this.term.write(
+            "\r\n\x1b[33m[warsha] session is not accepting input, the program looks stuck\x1b[0m\r\n",
+          );
+        });
+      }
     });
 
     // Ctrl+C stays SIGINT; copy is Ctrl+Shift+C / Ctrl+Insert. Paste is Ctrl+V (Windows

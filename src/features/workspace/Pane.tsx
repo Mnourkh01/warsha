@@ -1,4 +1,4 @@
-import { FolderInput, Maximize2, Minimize2, X } from "lucide-react";
+import { FolderInput, Maximize2, Minimize2, RadioTower, X } from "lucide-react";
 import { useWorkspaces } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
 import { useUI } from "../../store/ui";
@@ -17,6 +17,8 @@ export function Pane({ sessionId }: { sessionId: string }) {
   const attention = useRuntime((s) => Boolean(s.attention[sessionId]));
   const maximized = useUI((s) => s.maximizedSessionId === sessionId);
   const findOpen = useUI((s) => s.findOpen && active);
+  // The grid only renders the active workspace, so every visible pane broadcasts.
+  const broadcast = useUI((s) => s.broadcast);
   const t = useStrings();
 
   if (!session) return null;
@@ -47,6 +49,12 @@ export function Pane({ sessionId }: { sessionId: string }) {
           title={statusLabel}
         />
         <span className="pane-title bidi-auto">{session.name}</span>
+        {broadcast && (
+          <span className="broadcast-chip" role="status" title={t.broadcastChipTitle}>
+            <RadioTower size={11} />
+            {t.broadcastChip}
+          </span>
+        )}
         {attention && (
           <span
             className="attention-dot"

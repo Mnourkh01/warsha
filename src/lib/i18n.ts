@@ -167,6 +167,14 @@ const en = {
     `This workspace already has ${max} sessions. Make a new workspace or close one.`,
   sessionsOpenNote: (max: number) => `Sessions open in the active workspace (up to ${max}).`,
 
+  // broadcast input
+  broadcastChip: "ALL",
+  broadcastChipTitle:
+    "Broadcast is on: typing goes to every session in this workspace. Ctrl+Shift+I turns it off.",
+  cmdBroadcastOn: "Broadcast typing: send input to all sessions here",
+  cmdBroadcastOff: "Broadcast typing: turn off",
+  scBroadcast: "Broadcast typing to all sessions in the workspace",
+
   // update toast
   updateAvailable: (version: string) => `Warsha ${version} is available`,
   updateDownload: "Download",
