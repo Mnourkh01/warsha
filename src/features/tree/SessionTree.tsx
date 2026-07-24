@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  BookmarkPlus,
   ChevronDown,
   FolderOpen,
   FolderPlus,
   Layers,
+  LayoutTemplate,
   Moon,
   PanelLeftClose,
   Pencil,
@@ -17,6 +19,7 @@ import {
 import { MAX_PER_WS, useWorkspaces, type Workspace } from "../../store/workspaces";
 import { useRuntime } from "../../store/runtime";
 import { useSettings } from "../../store/settings";
+import { useTemplates } from "../../store/templates";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
 import { confirmDialog, pickFolder } from "../../lib/ipc";
@@ -25,6 +28,7 @@ import {
   deleteWorkspace,
   newWorkspace,
   openSession,
+  openTemplate,
   restartSession,
   switchWorkspace,
 } from "../../actions";
@@ -110,8 +114,62 @@ export function SessionTree() {
         {workspaces.every((w) => w.sessionIds.length === 0) && (
           <div className="tree-empty">{t.treeEmpty}</div>
         )}
+        <TemplatesSection />
       </div>
     </aside>
+  );
+}
+
+// Saved workspace templates: one click reopens the full layout as a new workspace.
+// Hidden entirely while no template exists (zero sidebar clutter for new users).
+function TemplatesSection() {
+  const templates = useTemplates((s) => s.templates);
+  const t = useStrings();
+  if (templates.length === 0) return null;
+  return (
+    <div className="tpl-section">
+      <div className="tree-group-label">{t.templatesGroup}</div>
+      {templates.map((tpl) => (
+        <div
+          key={tpl.id}
+          className="tree-row session-row"
+          role="button"
+          tabIndex={0}
+          title={t.openTemplateTitle(tpl.name, tpl.sessions.length)}
+          onClick={() => openTemplate(tpl.id)}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openTemplate(tpl.id);
+            }
+          }}
+        >
+          <span className="twist" />
+          <span className="row-icon">
+            <LayoutTemplate size={14} />
+          </span>
+          <span className="name bidi-auto">{tpl.name}</span>
+          <span className="ws-count">{tpl.sessions.length}</span>
+          <span className="row-actions" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="icon-btn sm"
+              title={t.deleteTemplate}
+              aria-label={t.deleteTemplateNamed(tpl.name)}
+              onClick={async () => {
+                const ok = await confirmDialog(
+                  t.deleteTemplateConfirm(tpl.name),
+                  t.deleteTemplate,
+                ).catch(() => false);
+                if (ok) useTemplates.getState().remove(tpl.id);
+              }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -264,6 +322,15 @@ function WorkspaceItem({
               onClick={() => void setFolder()}
             >
               <FolderOpen size={13} />
+            </button>
+            <button
+              className="icon-btn sm"
+              title={t.saveAsTemplate}
+              aria-label={t.saveAsTemplateNamed(ws.name)}
+              disabled={ws.sessionIds.length === 0}
+              onClick={() => useTemplates.getState().saveFromWorkspace(ws.id)}
+            >
+              <BookmarkPlus size={13} />
             </button>
             <button
               className="icon-btn sm"

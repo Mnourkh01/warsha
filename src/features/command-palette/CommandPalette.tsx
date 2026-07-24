@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useWorkspaces } from "../../store/workspaces";
 import { useSettings } from "../../store/settings";
+import { useTemplates } from "../../store/templates";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
 import {
@@ -23,6 +24,7 @@ import {
   newSession,
   newWorkspace,
   openSession,
+  openTemplate,
   restartSession,
   switchWorkspace,
 } from "../../actions";
@@ -43,6 +45,7 @@ export function CommandPalette() {
   const setPalette = useUI((s) => s.setPalette);
   const workspaces = useWorkspaces((s) => s.workspaces);
   const sessions = useWorkspaces((s) => s.sessions);
+  const templates = useTemplates((s) => s.templates);
   const activeSessionId = useWorkspaces((s) => s.activeSessionId);
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
@@ -188,8 +191,16 @@ export function CommandPalette() {
       run: () => openSession(n.id),
     }));
 
-    return [...base, ...wsCmds, ...openers];
-  }, [workspaces, sessions, activeSessionId, theme, setTheme, setSettings, t]);
+    const tplCmds: Command[] = templates.map((tpl) => ({
+      id: `tpl-${tpl.id}`,
+      label: t.cmdOpenTemplate(tpl.name),
+      icon: <Layers size={15} />,
+      hint: t.hintTemplate,
+      run: () => openTemplate(tpl.id),
+    }));
+
+    return [...base, ...wsCmds, ...tplCmds, ...openers];
+  }, [workspaces, sessions, templates, activeSessionId, theme, setTheme, setSettings, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

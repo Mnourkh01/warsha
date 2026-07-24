@@ -60,10 +60,19 @@ function makeWs(name: string): Workspace {
 
 const SHELL_KINDS = ["powershell", "cmd", "wsl", "custom"] as const;
 
-/** Boundary validation for one persisted session (same discipline as settings.sanitize):
- *  the blob is untrusted, and a malformed shell would flow straight into pty_spawn.
- *  Unknown extra fields (e.g. the removed `agent` flag) are dropped by reconstruction. */
-function sanitizeSession(id: string, raw: unknown): Session | null {
+/** A session without its id: what templates store and what addSession accepts. */
+export interface SessionSpec {
+  name: string;
+  shell: ShellKind;
+  cwd?: string;
+  typeId?: string;
+}
+
+/** Boundary validation for one persisted session spec (same discipline as
+ *  settings.sanitize): the blob is untrusted, and a malformed shell would flow straight
+ *  into pty_spawn. Unknown extra fields (e.g. the removed `agent` flag) are dropped by
+ *  reconstruction. Shared with the templates store. */
+export function sanitizeSessionSpec(raw: unknown): SessionSpec | null {
   if (!raw || typeof raw !== "object") return null;
   const s = raw as { name?: unknown; shell?: unknown; cwd?: unknown; typeId?: unknown };
   const shell = s.shell as ShellKind | undefined;
@@ -77,12 +86,16 @@ function sanitizeSession(id: string, raw: unknown): Session | null {
           (Array.isArray(shell.args) && shell.args.every((a) => typeof a === "string")))));
   if (!shellOk) return null;
   return {
-    id,
     name: typeof s.name === "string" && s.name.trim() ? s.name : "Session",
     shell,
     cwd: typeof s.cwd === "string" && s.cwd.trim() ? s.cwd : undefined,
     typeId: typeof s.typeId === "string" ? s.typeId : undefined,
   };
+}
+
+function sanitizeSession(id: string, raw: unknown): Session | null {
+  const spec = sanitizeSessionSpec(raw);
+  return spec ? { id, ...spec } : null;
 }
 
 export const useWorkspaces = create<WsState>((set, get) => {

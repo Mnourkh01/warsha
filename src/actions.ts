@@ -3,6 +3,7 @@
 import { useWorkspaces } from "./store/workspaces";
 import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useRuntime } from "./store/runtime";
+import { useTemplates } from "./store/templates";
 import { useUI } from "./store/ui";
 import { applySettingsToAll, disposeTerminal, getTerminal } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
@@ -123,6 +124,20 @@ export function changeSessionFolder(id: string, cwd: string): void {
 
 export function newWorkspace(): string {
   return useWorkspaces.getState().addWorkspace();
+}
+
+/** Open a template as a NEW workspace: create it, restore its project folder, spawn
+ *  every saved session. Returns the new workspace id, or null for an unknown template. */
+export function openTemplate(templateId: string): string | null {
+  const tpl = useTemplates.getState().templates.find((t) => t.id === templateId);
+  if (!tpl) return null;
+  const ws = useWorkspaces.getState();
+  const wsId = ws.addWorkspace(tpl.name);
+  if (tpl.defaultCwd) ws.setWorkspaceCwd(wsId, tpl.defaultCwd);
+  for (const spec of tpl.sessions) {
+    newSession({ ...spec, workspaceId: wsId });
+  }
+  return wsId;
 }
 
 export function switchWorkspace(id: string): void {

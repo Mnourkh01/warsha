@@ -7,6 +7,7 @@ import {
 } from "../lib/ipc";
 import { useWorkspaces, type Session, type Workspace } from "./workspaces";
 import { useSettings, type TerminalTheme } from "./settings";
+import { useTemplates, type WorkspaceTemplate } from "./templates";
 import type { ShellKind, ThemeMode } from "../lib/types";
 
 // Bump pattern for the NEXT schema change: raise VERSION, and either (a) write a
@@ -31,6 +32,9 @@ interface PersistBlob {
     termForeground?: string;
     termBold?: boolean;
   };
+  /** Added 2026-07-24, same VERSION: an absent field hydrates to an empty list, and an
+   *  older build reading a newer blob simply ignores it - no migration needed. */
+  templates?: { templates: WorkspaceTemplate[] };
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -45,6 +49,7 @@ function buildBlob(): PersistBlob {
     // PTY output/scrollback is not persisted.
     workspaces: useWorkspaces.getState().serialize(),
     settings: useSettings.getState().serialize(),
+    templates: useTemplates.getState().serialize(),
   };
 }
 
@@ -93,6 +98,7 @@ export async function initPersistence(): Promise<void> {
     if (blob && blob.version === VERSION) {
       if (blob.workspaces) useWorkspaces.getState().hydrate(blob.workspaces);
       if (blob.settings) useSettings.getState().hydrate(blob.settings);
+      if (blob.templates) useTemplates.getState().hydrate(blob.templates);
     } else if (blob) {
       // Unknown version: back the file up BEFORE the next debounced save overwrites it,
       // then start fresh. Never silently destroy the user's saved workspaces.
@@ -109,6 +115,7 @@ export async function initPersistence(): Promise<void> {
     ready = true;
     useWorkspaces.subscribe(scheduleSave);
     useSettings.subscribe(scheduleSave);
+    useTemplates.subscribe(scheduleSave);
   }
 
   // Flush pending changes when the user closes the window: preventDefault, await the

@@ -36,6 +36,19 @@ const en = {
   workspaceFolderTitle: (path: string) => `Project folder: ${path}`,
   chooseWorkspaceFolder: (name: string) => `Choose the project folder for ${name}`,
 
+  // workspace templates
+  templatesGroup: "Templates",
+  saveAsTemplate: "Save as template",
+  saveAsTemplateNamed: (name: string) => `Save ${name} as a template`,
+  openTemplateTitle: (name: string, n: number) =>
+    `Open ${name} as a new workspace (${n} session${n === 1 ? "" : "s"})`,
+  deleteTemplate: "Delete template",
+  deleteTemplateNamed: (name: string) => `Delete template ${name}`,
+  deleteTemplateConfirm: (name: string) =>
+    `Delete the template "${name}"? Open workspaces are not affected.`,
+  cmdOpenTemplate: (name: string) => `Open template: ${name}`,
+  hintTemplate: "template",
+
   // session rows and panes
   sessionName: "Session name",
   restart: "Restart",
