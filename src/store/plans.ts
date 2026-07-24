@@ -42,13 +42,33 @@ const MAX_OWNER = 80;
 const MAX_DUE = 40;
 const MAX_LINK = 300;
 
-/** Kinds whose list field is meaningful (acceptance / options / checks / tools). */
-export const LIST_KINDS = ["task", "decision", "test", "agent"] as const;
+/** Kinds whose list field is meaningful (acceptance / options / checks / tools /
+ *  exit criteria / screen states). */
+export const LIST_KINDS = ["task", "decision", "test", "agent", "phase", "screen"] as const;
 /** Kinds that carry a path-like field (URL path / screen route). */
 export const PATH_KINDS = ["api", "screen"] as const;
 /** Kinds that carry a model name (AI step, agent). */
 export const MODEL_KINDS = ["ai", "agent"] as const;
+/** Kinds that carry the one-line spec field (meaning differs per kind: technology,
+ *  input-to-output contract, exit condition, provider, primary key, rollback plan). */
+export const SPEC_KINDS = ["service", "ai", "agent", "integration", "data", "deploy"] as const;
 const MAX_MODEL = 60;
+const MAX_SPEC = 200;
+
+export const API_AUTHS = ["public", "user", "admin"] as const;
+export type ApiAuth = (typeof API_AUTHS)[number];
+
+export const NOTE_FLAVORS = ["idea", "risk", "question", "constraint"] as const;
+export type NoteFlavor = (typeof NOTE_FLAVORS)[number];
+
+export const DATA_SENSITIVITIES = ["none", "personal", "sensitive"] as const;
+export type DataSensitivity = (typeof DATA_SENSITIVITIES)[number];
+
+export const TEST_TYPES = ["unit", "integration", "e2e", "manual"] as const;
+export type TestType = (typeof TEST_TYPES)[number];
+
+export const DEPLOY_ENVS = ["dev", "staging", "prod"] as const;
+export type DeployEnv = (typeof DEPLOY_ENVS)[number];
 
 // Boundary caps, used on hydrate AND as add-time guards. A max-size plan stays far
 // under the 5 MB Rust state-file cap.
@@ -100,7 +120,24 @@ export interface PlanNode {
   path?: string;
   /** ai and agent: which model runs it (free text). */
   model?: string;
-  /** task (acceptance criteria), decision (options), test (checks), agent (tools) */
+  /** One line whose meaning depends on the kind: service technology, ai input-to-output
+   *  contract, agent exit condition, integration provider, data primary key, deploy
+   *  rollback plan. */
+  spec?: string;
+  /** api only: who may call it. */
+  auth?: ApiAuth;
+  /** note only: what kind of note this is. */
+  flavor?: NoteFlavor;
+  /** data only: how sensitive the stored data is. */
+  sensitivity?: DataSensitivity;
+  /** test only. */
+  testType?: TestType;
+  /** deploy only. */
+  env?: DeployEnv;
+  /** decision only: the option that was picked (usually one of the options list). */
+  chosen?: string;
+  /** task (acceptance), decision (options), test (checks), agent (tools),
+   *  phase (exit criteria), screen (states and key parts) */
   acceptance?: string[];
   /** data only */
   fields?: PlanField[];
@@ -190,6 +227,37 @@ export function sanitizePlanNode(raw: unknown): PlanNode | null {
   }
   if ((MODEL_KINDS as readonly string[]).includes(kind)) {
     node.model = cleanStr(r.model, MAX_MODEL);
+  }
+  if ((SPEC_KINDS as readonly string[]).includes(kind)) {
+    node.spec = cleanStr(r.spec, MAX_SPEC);
+  }
+  if (kind === "api") {
+    node.auth = (API_AUTHS as readonly string[]).includes(r.auth as string)
+      ? (r.auth as ApiAuth)
+      : undefined;
+  }
+  if (kind === "note") {
+    node.flavor = (NOTE_FLAVORS as readonly string[]).includes(r.flavor as string)
+      ? (r.flavor as NoteFlavor)
+      : undefined;
+  }
+  if (kind === "data") {
+    node.sensitivity = (DATA_SENSITIVITIES as readonly string[]).includes(r.sensitivity as string)
+      ? (r.sensitivity as DataSensitivity)
+      : undefined;
+  }
+  if (kind === "test") {
+    node.testType = (TEST_TYPES as readonly string[]).includes(r.testType as string)
+      ? (r.testType as TestType)
+      : undefined;
+  }
+  if (kind === "deploy") {
+    node.env = (DEPLOY_ENVS as readonly string[]).includes(r.env as string)
+      ? (r.env as DeployEnv)
+      : undefined;
+  }
+  if (kind === "decision") {
+    node.chosen = cleanStr(r.chosen, MAX_SPEC);
   }
   if ((LIST_KINDS as readonly string[]).includes(kind)) {
     const list = Array.isArray(r.acceptance) ? r.acceptance : [];

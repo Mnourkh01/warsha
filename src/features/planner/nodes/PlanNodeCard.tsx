@@ -22,6 +22,9 @@ export function PlanNodeCard({ data, selected }: NodeProps<PlanFlowNode>) {
         <Icon size={12} />
         <span>{t.planKind[n.kind]}</span>
         <span className="plan-node-flags">
+          {n.kind === "note" && n.flavor && (
+            <b className={`plan-node-flavor f-${n.flavor}`}>{n.flavor}</b>
+          )}
           {n.priority === "must" && (
             <b className="plan-node-must" title={t.priorityMust}>
               !
@@ -39,7 +42,13 @@ export function PlanNodeCard({ data, selected }: NodeProps<PlanFlowNode>) {
         {n.label}
       </div>
       {n.kind === "api" ? (
-        <div className="plan-node-sub mono">{`${n.method ?? "GET"} ${n.path ?? "/"}`}</div>
+        <div className="plan-node-sub mono">
+          {`${n.method ?? "GET"} ${n.path ?? "/"}${n.auth ? ` · ${n.auth}` : ""}`}
+        </div>
+      ) : n.kind === "deploy" && n.env ? (
+        <div className="plan-node-sub mono">{n.env}</div>
+      ) : n.kind === "test" && n.testType ? (
+        <div className="plan-node-sub">{n.testType}</div>
       ) : n.kind === "screen" && n.path ? (
         <div className="plan-node-sub mono">{n.path}</div>
       ) : (n.kind === "ai" || n.kind === "agent") && n.model ? (

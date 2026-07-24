@@ -151,6 +151,36 @@ describe("sanitizePlanDoc", () => {
     expect(byId.get("bad")?.effort).toBeUndefined();
   });
 
+  it("gates the per-kind selects and spec to their kinds", () => {
+    const out = sanitizePlanDoc(
+      doc({
+        nodes: [
+          node("api1", { kind: "api", auth: "user" }),
+          node("t1", { auth: "admin" as never, spec: "sneaky" as never }),
+          node("n1", { kind: "note", flavor: "risk" }),
+          node("d1", { kind: "data", sensitivity: "personal", spec: "id uuid" }),
+          node("q1", { kind: "test", testType: "e2e" }),
+          node("dep1", { kind: "deploy", env: "prod", spec: "revert release" }),
+          node("dec1", { kind: "decision", acceptance: ["A", "B"], chosen: "A" }),
+          node("p1", { kind: "phase", acceptance: ["all tests green"] }),
+          node("sv1", { kind: "service", spec: "Rust + Tauri" }),
+        ],
+      }),
+    );
+    const byId = new Map(out?.nodes.map((n) => [n.id, n]));
+    expect(byId.get("api1")?.auth).toBe("user");
+    expect(byId.get("t1")?.auth).toBeUndefined();
+    expect(byId.get("t1")?.spec).toBeUndefined();
+    expect(byId.get("n1")?.flavor).toBe("risk");
+    expect(byId.get("d1")?.sensitivity).toBe("personal");
+    expect(byId.get("d1")?.spec).toBe("id uuid");
+    expect(byId.get("q1")?.testType).toBe("e2e");
+    expect(byId.get("dep1")?.env).toBe("prod");
+    expect(byId.get("dec1")?.chosen).toBe("A");
+    expect(byId.get("p1")?.acceptance).toEqual(["all tests green"]);
+    expect(byId.get("sv1")?.spec).toBe("Rust + Tauri");
+  });
+
   it("validates priority, owner, due, and link (http(s) only)", () => {
     const out = sanitizePlanDoc(
       doc({

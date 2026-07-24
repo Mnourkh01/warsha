@@ -122,13 +122,23 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     decision: "Option",
     test: "Check",
     agent: "Tool",
+    screen: "Part",
+  };
+
+  const SPEC_LABEL: Partial<Record<PlanNodeKind, string>> = {
+    service: "Technology",
+    ai: "Contract",
+    agent: "Exit condition",
+    integration: "Provider",
+    data: "Primary key",
+    deploy: "Rollback",
   };
 
   const emitItem = (m: PlanNode) => {
     const arrowLines = edgeLines(m);
     const desc = m.description ? inline(m.description) : "";
     if (m.kind === "note") {
-      push(`> **${ref(m)}**`);
+      push(`> **${ref(m)}**${m.flavor ? ` (${m.flavor})` : ""}`);
       const body = m.description ? block(m.description) : "";
       for (const l of body ? body.split("\n") : []) push(`> ${l}`.trimEnd());
       push();
@@ -157,6 +167,12 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     const sep = m.kind === "api" ? ": " : " - ";
     push(`- ${box} ${head}${tags}${desc ? `${sep}${desc}` : ""}`);
     if (m.model) push(`  - Model: ${inline(m.model)}`);
+    if (m.spec) push(`  - ${SPEC_LABEL[m.kind] ?? "Spec"}: ${inline(m.spec)}`);
+    if (m.auth) push(`  - Auth: ${m.auth}`);
+    if (m.testType) push(`  - Type: ${m.testType}`);
+    if (m.env) push(`  - Environment: ${m.env}`);
+    if (m.sensitivity) push(`  - Sensitivity: ${m.sensitivity}`);
+    if (m.chosen) push(`  - Chosen: ${inline(m.chosen)}`);
     const prefix = LIST_PREFIX[m.kind];
     if (prefix) {
       for (const a of m.acceptance ?? []) push(`  - ${prefix}: ${inline(a)}`);
@@ -205,6 +221,11 @@ export function planToMarkdown(doc: PlanDoc, opts: { cwd?: string } = {}): strin
     if (arrowLines.length > 0) {
       push();
       for (const line of arrowLines) push(line);
+    }
+    if (p.acceptance?.length) {
+      push();
+      push("Exit criteria:");
+      for (const a of p.acceptance) push(`- ${inline(a)}`);
     }
     emitMembers(doc.nodes.filter((n) => n.kind !== "phase" && n.phaseId === p.id));
   }

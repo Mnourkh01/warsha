@@ -3,10 +3,16 @@ import { Trash2 } from "lucide-react";
 import { TINTS } from "../../lib/tints";
 import { useStrings } from "../../lib/i18n";
 import {
+  API_AUTHS,
+  DATA_SENSITIVITIES,
+  DEPLOY_ENVS,
   HTTP_METHODS,
   LIST_KINDS,
   MODEL_KINDS,
+  NOTE_FLAVORS,
   PLAN_PRIORITIES,
+  SPEC_KINDS,
+  TEST_TYPES,
   MAX_ACCEPTANCE,
   MAX_ACCEPTANCE_LEN,
   MAX_DESC,
@@ -59,6 +65,38 @@ function fieldsText(fields: PlanField[] | undefined): string {
   return (fields ?? [])
     .map((f) => `${f.name}: ${f.type}${f.note ? ` | ${f.note}` : ""}`)
     .join("\n");
+}
+
+/** Segmented single-choice with click-again-to-clear, shared by the kind selects. */
+function SegChoice<T extends string>({
+  label,
+  value,
+  options,
+  names,
+  onPick,
+}: {
+  label: string;
+  value: T | undefined;
+  options: readonly T[];
+  names: Record<T, string>;
+  onPick: (value: T | undefined) => void;
+}) {
+  return (
+    <div className="field">
+      <span className="field-label">{label}</span>
+      <div className="seg">
+        {options.map((option) => (
+          <button
+            key={option}
+            className={value === option ? "on" : ""}
+            onClick={() => onPick(value === option ? undefined : option)}
+          >
+            {names[option]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** Right panel for the selected block. Text lists (acceptance, fields) keep a local
@@ -281,6 +319,97 @@ export function Inspector({
           />
         </label>
       )}
+      {(SPEC_KINDS as readonly string[]).includes(node.kind) && (
+        <label className="field">
+          <span className="field-label">
+            {node.kind === "service"
+              ? t.specTech
+              : node.kind === "ai"
+                ? t.specContract
+                : node.kind === "agent"
+                  ? t.specExit
+                  : node.kind === "integration"
+                    ? t.specProvider
+                    : node.kind === "data"
+                      ? t.specKey
+                      : t.specRollback}
+          </span>
+          <input
+            className="input bidi-auto"
+            dir="auto"
+            maxLength={200}
+            value={node.spec ?? ""}
+            onChange={(e) => onPatch({ spec: e.target.value || undefined })}
+          />
+        </label>
+      )}
+      {node.kind === "api" && (
+        <SegChoice
+          label={t.inspAuth}
+          value={node.auth}
+          options={API_AUTHS}
+          names={{ public: t.authPublic, user: t.authUser, admin: t.authAdmin }}
+          onPick={(auth) => onPatch({ auth })}
+        />
+      )}
+      {node.kind === "note" && (
+        <SegChoice
+          label={t.inspFlavor}
+          value={node.flavor}
+          options={NOTE_FLAVORS}
+          names={{
+            idea: t.flavorIdea,
+            risk: t.flavorRisk,
+            question: t.flavorQuestion,
+            constraint: t.flavorConstraint,
+          }}
+          onPick={(flavor) => onPatch({ flavor })}
+        />
+      )}
+      {node.kind === "data" && (
+        <SegChoice
+          label={t.inspSensitivity}
+          value={node.sensitivity}
+          options={DATA_SENSITIVITIES}
+          names={{ none: t.sensNone, personal: t.sensPersonal, sensitive: t.sensSensitive }}
+          onPick={(sensitivity) => onPatch({ sensitivity })}
+        />
+      )}
+      {node.kind === "test" && (
+        <SegChoice
+          label={t.inspTestType}
+          value={node.testType}
+          options={TEST_TYPES}
+          names={{ unit: t.ttUnit, integration: t.ttIntegration, e2e: t.ttE2e, manual: t.ttManual }}
+          onPick={(testType) => onPatch({ testType })}
+        />
+      )}
+      {node.kind === "deploy" && (
+        <SegChoice
+          label={t.inspEnv}
+          value={node.env}
+          options={DEPLOY_ENVS}
+          names={{ dev: t.envDev, staging: t.envStaging, prod: t.envProd }}
+          onPick={(env) => onPatch({ env })}
+        />
+      )}
+      {node.kind === "decision" && (node.acceptance?.length ?? 0) > 0 && (
+        <label className="field">
+          <span className="field-label">{t.inspChosen}</span>
+          <select
+            className="select"
+            value={node.chosen ?? ""}
+            onChange={(e) => onPatch({ chosen: e.target.value || undefined })}
+          >
+            <option value="">{t.chosenNone}</option>
+            {(node.acceptance ?? []).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {(LIST_KINDS as readonly string[]).includes(node.kind) && (
         <label className="field">
           <span className="field-label">
@@ -290,7 +419,11 @@ export function Inspector({
                 ? t.inspChecks
                 : node.kind === "agent"
                   ? t.inspTools
-                  : t.inspAcceptance}{" "}
+                  : node.kind === "phase"
+                    ? t.inspExitCriteria
+                    : node.kind === "screen"
+                      ? t.inspScreenParts
+                      : t.inspAcceptance}{" "}
             <span className="field-hint">{t.inspAcceptanceHint}</span>
           </span>
           <textarea

@@ -187,6 +187,29 @@ describe("planToMarkdown", () => {
     expect(ai).toContain("  - Model: claude-haiku-4-5");
   });
 
+  it("renders per-kind options: spec lines, selects, chosen, exit criteria, flavor", () => {
+    const md = planToMarkdown(
+      doc({
+        nodes: [
+          node("p1", { kind: "phase", label: "Core", acceptance: ["tests green", "user tried it"] }),
+          node("sv1", { kind: "service", label: "Engine", spec: "Rust + Tauri", phaseId: "p1" }),
+          node("api1", { kind: "api", label: "List", auth: "admin", phaseId: "p1" }),
+          node("dep1", { kind: "deploy", label: "Release", env: "prod", spec: "revert tag" }),
+          node("dec1", { kind: "decision", label: "Pick db", acceptance: ["SQLite", "Postgres"], chosen: "SQLite" }),
+          node("n1", { kind: "note", label: "Careful", flavor: "risk", description: "Watch cost." }),
+        ],
+      }),
+    );
+    expect(md).toContain("Exit criteria:");
+    expect(md).toContain("- tests green");
+    expect(md).toContain("  - Technology: Rust + Tauri");
+    expect(md).toContain("  - Auth: admin");
+    expect(md).toContain("  - Environment: prod");
+    expect(md).toContain("  - Rollback: revert tag");
+    expect(md).toContain("  - Chosen: SQLite");
+    expect(md).toContain("> **Careful** (risk)");
+  });
+
   it("labels incoming arrows by their kind", () => {
     const md = planToMarkdown(
       doc({
