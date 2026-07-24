@@ -187,6 +187,11 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         ui.toggleBroadcast();
+      } else if (e.ctrlKey && e.shiftKey && !e.altKey && key === "d") {
+        // Plan canvas mode for the active workspace.
+        e.preventDefault();
+        e.stopPropagation();
+        ui.togglePlanner();
       } else if (e.key === "Escape") {
         // Close topmost-first, one layer per press. (The find bar handles its own
         // Escape while its input is focused; this covers focus elsewhere.)

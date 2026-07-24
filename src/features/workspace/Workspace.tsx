@@ -1,13 +1,14 @@
 import { Fragment, useState } from "react";
-import { SquareTerminal } from "lucide-react";
+import { SquareTerminal, Workflow } from "lucide-react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { paneRows, useWorkspaces } from "../../store/workspaces";
 import { useUI } from "../../store/ui";
-import { newSession } from "../../actions";
+import { newSession, openPlanner } from "../../actions";
 import { whichProgram } from "../../lib/ipc";
 import { AI_TYPES, SHELL_TYPES, buildShell } from "../../lib/sessionTypes";
 import { SessionIcon } from "../icons";
 import { Pane } from "./Pane";
+import { PlannerView } from "../planner/PlannerView";
 import { useStrings } from "../../lib/i18n";
 
 const FILL = { height: "100%", width: "100%" } as const;
@@ -54,8 +55,19 @@ export function Workspace() {
     return ws ? ws.sessionIds : [];
   });
   const maximizedId = useUI((s) => s.maximizedSessionId);
+  const plannerOpen = useUI((s) => s.plannerOpen);
   const rows = paneRows(ids);
   const t = useStrings();
+
+  // Planner mode replaces the whole grid (works on an empty workspace too - planning
+  // BEFORE opening terminals is the point).
+  if (plannerOpen) {
+    return (
+      <div className="workspace">
+        <PlannerView />
+      </div>
+    );
+  }
 
   if (ids.length === 0) {
     return (
@@ -68,6 +80,10 @@ export function Workspace() {
             {t.emptyHintPress} <kbd>Ctrl K</kbd> {t.emptyHintOr} <b>+</b> {t.emptyHintEnd}
           </div>
           <StartClaudeButton />
+          <button className="empty-cta" onClick={() => openPlanner()}>
+            <Workflow size={16} />
+            {t.planProject}
+          </button>
         </div>
       </div>
     );

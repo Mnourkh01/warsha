@@ -15,6 +15,7 @@ import {
   Settings,
   Sun,
   Trash2,
+  Workflow,
   X,
 } from "lucide-react";
 import { MAX_PER_WS, useWorkspaces, type Workspace } from "../../store/workspaces";
@@ -29,6 +30,7 @@ import {
   closeSession,
   deleteWorkspace,
   newWorkspace,
+  openPlanner,
   openSession,
   openTemplate,
   restartSession,
@@ -324,6 +326,14 @@ function WorkspaceItem({
               onClick={() => void setFolder()}
             >
               <FolderOpen size={13} />
+            </button>
+            <button
+              className="icon-btn sm"
+              title={t.openPlanner}
+              aria-label={t.openPlannerFor(ws.name)}
+              onClick={() => openPlanner(ws.id)}
+            >
+              <Workflow size={13} />
             </button>
             <button
               className="icon-btn sm"

@@ -12,6 +12,7 @@ vi.mock("../lib/ipc", () => ipc);
 import { flushSave, initPersistence } from "./persistence";
 import { useWorkspaces } from "./workspaces";
 import { useSettings } from "./settings";
+import { usePlans } from "./plans";
 
 // Verbatim copy of the on-disk state.json this app actually wrote (2026-07-21). The
 // hydrate hardening must never be the thing that wipes a real user's workspaces.
@@ -161,5 +162,50 @@ describe("persistence", () => {
     await initPersistence();
     expect(useWorkspaces.getState().activeWorkspaceId).toBe("w9");
     expect(ipc.sessionStateBackup).not.toHaveBeenCalled();
+  });
+
+  it("a blob with a plans field hydrates the plans store", async () => {
+    usePlans.getState().hydrate({ plans: {} });
+    ipc.loadState.mockResolvedValueOnce({
+      version: 3,
+      workspaces: {
+        workspaces: [{ id: "w1", name: "One", sessionIds: [] }],
+        sessions: {},
+        activeWorkspaceId: "w1",
+      },
+      settings: {},
+      plans: {
+        plans: {
+          w1: {
+            id: "p1",
+            name: "Roadmap",
+            nodes: [{ id: "n1", kind: "task", x: 1, y: 2, label: "Do it" }],
+            edges: [],
+            viewport: { x: 0, y: 0, zoom: 1 },
+            updatedAt: 7,
+          },
+        },
+      },
+    });
+    await initPersistence();
+    expect(usePlans.getState().plans.w1?.name).toBe("Roadmap");
+    expect(usePlans.getState().plans.w1?.nodes[0]?.label).toBe("Do it");
+  });
+
+  it("a blob WITHOUT a plans field neither crashes nor backs up (pre-planner blob)", async () => {
+    ipc.loadState.mockResolvedValueOnce(structuredClone(REAL_V3_BLOB));
+    await initPersistence();
+    expect(ipc.sessionStateBackup).not.toHaveBeenCalled();
+  });
+
+  it("saved blobs include the plans field", async () => {
+    usePlans.getState().hydrate({ plans: {} });
+    usePlans.getState().ensurePlan("w-save", "Saved plan");
+    await flushSave(500);
+    const calls = ipc.saveState.mock.calls;
+    const blob = calls[calls.length - 1]?.[0] as {
+      plans?: { plans: Record<string, { name: string }> };
+    };
+    expect(blob?.plans?.plans["w-save"]?.name).toBe("Saved plan");
   });
 });

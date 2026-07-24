@@ -8,6 +8,7 @@ import {
 import { useWorkspaces, type Session, type Workspace } from "./workspaces";
 import { useSettings, type TerminalTheme } from "./settings";
 import { useTemplates, type WorkspaceTemplate } from "./templates";
+import { usePlans, type PlanDoc } from "./plans";
 import type { ShellKind, ThemeMode } from "../lib/types";
 
 // Bump pattern for the NEXT schema change: raise VERSION, and either (a) write a
@@ -35,6 +36,8 @@ interface PersistBlob {
   /** Added 2026-07-24, same VERSION: an absent field hydrates to an empty list, and an
    *  older build reading a newer blob simply ignores it - no migration needed. */
   templates?: { templates: WorkspaceTemplate[] };
+  /** Added 2026-07-24 (plan canvas), same VERSION, same optional-field pattern. */
+  plans?: { plans: Record<string, PlanDoc> };
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,6 +53,7 @@ function buildBlob(): PersistBlob {
     workspaces: useWorkspaces.getState().serialize(),
     settings: useSettings.getState().serialize(),
     templates: useTemplates.getState().serialize(),
+    plans: usePlans.getState().serialize(),
   };
 }
 
@@ -99,6 +103,12 @@ export async function initPersistence(): Promise<void> {
       if (blob.workspaces) useWorkspaces.getState().hydrate(blob.workspaces);
       if (blob.settings) useSettings.getState().hydrate(blob.settings);
       if (blob.templates) useTemplates.getState().hydrate(blob.templates);
+      if (blob.plans) {
+        usePlans.getState().hydrate(blob.plans);
+        // Plans are keyed by workspace id; drop entries whose workspace is gone so
+        // orphaned plan blobs cannot accumulate in the state file forever.
+        usePlans.getState().prune(useWorkspaces.getState().workspaces.map((w) => w.id));
+      }
     } else if (blob) {
       // Unknown version: back the file up BEFORE the next debounced save overwrites it,
       // then start fresh. Never silently destroy the user's saved workspaces.
@@ -116,6 +126,7 @@ export async function initPersistence(): Promise<void> {
     useWorkspaces.subscribe(scheduleSave);
     useSettings.subscribe(scheduleSave);
     useTemplates.subscribe(scheduleSave);
+    usePlans.subscribe(scheduleSave);
   }
 
   // Flush pending changes when the user closes the window: preventDefault, await the

@@ -11,12 +11,15 @@ import {
   RadioTower,
   RotateCw,
   Search,
+  Send,
   Settings as SettingsIcon,
+  Workflow,
   X,
 } from "lucide-react";
 import { useWorkspaces } from "../../store/workspaces";
 import { useSettings } from "../../store/settings";
 import { useTemplates } from "../../store/templates";
+import { usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
 import { resolveTheme } from "../../lib/theme";
 import {
@@ -48,7 +51,10 @@ export function CommandPalette() {
   const sessions = useWorkspaces((s) => s.sessions);
   const templates = useTemplates((s) => s.templates);
   const broadcast = useUI((s) => s.broadcast);
+  const plannerOpen = useUI((s) => s.plannerOpen);
   const activeSessionId = useWorkspaces((s) => s.activeSessionId);
+  const activeWorkspaceId = useWorkspaces((s) => s.activeWorkspaceId);
+  const planNodeCount = usePlans((s) => s.plans[activeWorkspaceId]?.nodes.length ?? 0);
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
   const setSettings = useUI((s) => s.setSettings);
@@ -158,6 +164,26 @@ export function CommandPalette() {
         run: () => useUI.getState().toggleBroadcast(),
       },
       {
+        id: "toggle-planner",
+        label: plannerOpen ? t.cmdClosePlanner : t.cmdOpenPlanner,
+        icon: <Workflow size={15} />,
+        hint: "Ctrl+Shift+D",
+        run: () => useUI.getState().togglePlanner(),
+      },
+      ...(planNodeCount > 0
+        ? [
+            {
+              id: "send-plan",
+              label: t.cmdSendPlan,
+              icon: <Send size={15} />,
+              run: () => {
+                useUI.getState().setPlanner(true);
+                useUI.getState().setPlanSend(true);
+              },
+            } satisfies Command,
+          ]
+        : []),
+      {
         id: "toggle-sidebar",
         label: t.cmdToggleSidebar,
         icon: <PanelLeft size={15} />,
@@ -209,7 +235,7 @@ export function CommandPalette() {
     }));
 
     return [...base, ...wsCmds, ...tplCmds, ...openers];
-  }, [workspaces, sessions, templates, broadcast, activeSessionId, theme, setTheme, setSettings, t]);
+  }, [workspaces, sessions, templates, broadcast, plannerOpen, planNodeCount, activeSessionId, theme, setTheme, setSettings, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

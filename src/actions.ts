@@ -4,6 +4,7 @@ import { useWorkspaces } from "./store/workspaces";
 import { useSettings, resolveTerminalTheme } from "./store/settings";
 import { useRuntime } from "./store/runtime";
 import { useTemplates } from "./store/templates";
+import { usePlans } from "./store/plans";
 import { useUI } from "./store/ui";
 import { applySettingsToAll, disposeTerminal, getTerminal } from "./features/terminal/controller";
 import { resolveTheme } from "./lib/theme";
@@ -130,7 +131,10 @@ export function changeSessionFolder(id: string, cwd: string): void {
 }
 
 export function newWorkspace(): string {
-  useUI.getState().setBroadcast(false);
+  const ui = useUI.getState();
+  ui.setBroadcast(false);
+  // Same rule as switchWorkspace: the planner was a view of the workspace being left.
+  ui.setPlanner(false);
   return useWorkspaces.getState().addWorkspace();
 }
 
@@ -140,6 +144,7 @@ export function openTemplate(templateId: string): string | null {
   const tpl = useTemplates.getState().templates.find((t) => t.id === templateId);
   if (!tpl) return null;
   useUI.getState().setBroadcast(false);
+  useUI.getState().setPlanner(false);
   const ws = useWorkspaces.getState();
   const wsId = ws.addWorkspace(tpl.name);
   if (tpl.defaultCwd) ws.setWorkspaceCwd(wsId, tpl.defaultCwd);
@@ -158,16 +163,30 @@ export function switchWorkspace(id: string): void {
     // Maximize is a view of the CURRENT grid; carrying it across a switch surprises the
     // user with a lone full-screen pane when they come back.
     ui.setMaximized(null);
+    // Same rule for the planner: it is a view of the workspace being left.
+    ui.setPlanner(false);
   }
   useWorkspaces.getState().setActiveWorkspace(id);
+}
+
+/** Open the plan canvas for a workspace (the active one by default). */
+export function openPlanner(workspaceId?: string): void {
+  if (workspaceId) switchWorkspace(workspaceId);
+  useUI.getState().setPlanner(true);
 }
 
 export function deleteWorkspace(id: string): void {
   const wasActive = useWorkspaces.getState().activeWorkspaceId === id;
   const removed = useWorkspaces.getState().removeWorkspace(id);
+  usePlans.getState().removePlanFor(id);
   const runtime = useRuntime.getState();
   const ui = useUI.getState();
-  if (wasActive) ui.setBroadcast(false);
+  if (wasActive) {
+    ui.setBroadcast(false);
+    // The planner shown was this workspace's plan; falling through to another
+    // workspace's plan unasked would be surprising.
+    ui.setPlanner(false);
+  }
   for (const sid of removed) {
     if (ui.maximizedSessionId === sid) ui.setMaximized(null);
     void disposeTerminal(sid);
