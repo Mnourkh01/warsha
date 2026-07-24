@@ -164,10 +164,18 @@ export default function App() {
   }, []);
 
   // Coming back to the window means the user is looking at the active pane again.
+  // Also hand keyboard focus straight to the active terminal: dictation tools
+  // (EchoFlow) refocus the window and immediately inject Ctrl+V, and that keystroke
+  // dies on the app chrome unless the terminal textarea is focused RIGHT NOW.
   useEffect(() => {
     const onFocus = () => {
+      const ui = useUI.getState();
       const sid = useWorkspaces.getState().activeSessionId;
-      if (sid) useRuntime.getState().clearAttention(sid);
+      if (!sid) return;
+      useRuntime.getState().clearAttention(sid);
+      const dialogOpen =
+        ui.paletteOpen || ui.newSessionOpen || ui.settingsOpen || ui.shortcutsOpen;
+      if (!dialogOpen && !ui.plannerOpen) getTerminal(sid)?.focus();
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -239,6 +247,27 @@ export default function App() {
         else if (ui.settingsOpen) ui.setSettings(false);
         else if (ui.shortcutsOpen) ui.setShortcuts(false);
         else if (ui.findOpen) ui.setFind(false);
+      } else if (
+        ((e.ctrlKey && !e.altKey && (e.code === "KeyV" || key === "v")) ||
+          (e.shiftKey && e.code === "Insert")) &&
+        !(e.target as HTMLElement | null)?.closest?.(".xterm, input, textarea, select, [contenteditable]") &&
+        !ui.paletteOpen &&
+        !ui.newSessionOpen &&
+        !ui.settingsOpen &&
+        !ui.shortcutsOpen &&
+        !ui.plannerOpen
+      ) {
+        // A paste chord that landed on the app chrome (not the terminal, not a field):
+        // route it to the active session. Dictation tools (EchoFlow) inject Ctrl+V at
+        // whatever has focus; without this the dictated text silently vanishes.
+        const sid = useWorkspaces.getState().activeSessionId;
+        const term = sid ? getTerminal(sid) : undefined;
+        if (term) {
+          e.preventDefault();
+          e.stopPropagation();
+          term.focus();
+          term.pasteClipboard(e.ctrlKey && !e.shiftKey);
+        }
       } else if (
         e.ctrlKey &&
         !e.altKey &&

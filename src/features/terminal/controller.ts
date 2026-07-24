@@ -148,10 +148,16 @@ class TerminalController {
     // quoted-insert), same tradeoff as Windows Terminal.
     this.term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
+      // Match the LETTER via key OR code: keystrokes injected by dictation tools
+      // (EchoFlow's SendInput Ctrl+V) frequently arrive with an empty `code` because
+      // Windows synthesizes them without a scan code, so a code-only check misses them
+      // and the paste silently fails. `key` still carries "v"/"c" for those events.
+      const isV = e.code === "KeyV" || e.key === "v" || e.key === "V";
+      const isC = e.code === "KeyC" || e.key === "c" || e.key === "C";
       const copy =
-        (e.ctrlKey && e.shiftKey && e.code === "KeyC") || (e.ctrlKey && e.code === "Insert");
+        (e.ctrlKey && e.shiftKey && isC) || (e.ctrlKey && e.code === "Insert");
       const paste =
-        (e.ctrlKey && !e.altKey && e.code === "KeyV") || (e.shiftKey && e.code === "Insert");
+        (e.ctrlKey && !e.altKey && isV) || (e.shiftKey && e.code === "Insert");
       if (copy) {
         this.copySelection();
         return false;
@@ -182,8 +188,10 @@ class TerminalController {
   }
 
   /** Paste clipboard text; with `forwardWhenEmpty`, a text-less clipboard (image, files)
-   *  sends a literal ^V to the PTY so the running TUI can read the clipboard itself. */
-  private pasteClipboard(forwardWhenEmpty = false): void {
+   *  sends a literal ^V to the PTY so the running TUI can read the clipboard itself.
+   *  Public: App.tsx routes stray Ctrl+V chords here when the keystroke lands on the app
+   *  chrome instead of the terminal (dictation tools inject Ctrl+V wherever focus sits). */
+  pasteClipboard(forwardWhenEmpty = false): void {
     const forward = () => {
       if (!this.disposed) void ptyWrite(this.sessionId, "\x16").catch(() => {});
     };
