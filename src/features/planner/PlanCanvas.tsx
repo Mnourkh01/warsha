@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import {
   Background,
   Controls,
@@ -70,6 +78,8 @@ interface CanvasProps {
   wsId: string;
   previewOpen: boolean;
   onClosePreview: () => void;
+  /** Rendered instead of preview/inspector when set (the AI review panel). */
+  sidePanel?: ReactNode;
 }
 
 export function PlanCanvas(props: CanvasProps) {
@@ -80,7 +90,7 @@ export function PlanCanvas(props: CanvasProps) {
   );
 }
 
-function CanvasInner({ wsId, previewOpen, onClosePreview }: CanvasProps) {
+function CanvasInner({ wsId, previewOpen, onClosePreview, sidePanel }: CanvasProps) {
   const t = useStrings();
   const { screenToFlowPosition, setCenter, getZoom } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -302,7 +312,9 @@ function CanvasInner({ wsId, previewOpen, onClosePreview }: CanvasProps) {
         </ReactFlow>
         {nodes.length === 0 && <div className="plan-empty-hint">{t.planEmptyHint}</div>}
       </div>
-      {previewOpen ? (
+      {sidePanel ? (
+        sidePanel
+      ) : previewOpen ? (
         <RunPreview
           steps={preview.steps}
           cyclicIds={preview.cyclicIds}

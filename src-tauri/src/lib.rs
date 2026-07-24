@@ -1,6 +1,7 @@
 //! Warsha - a lightweight terminal workspace. Tauri app entry.
 
 mod commands;
+mod headless;
 mod pty;
 mod session;
 mod shells;
@@ -33,6 +34,7 @@ pub fn run() {
             commands::pty_kill,
             commands::which_program,
             commands::shell_check,
+            headless::run_headless,
             commands::session_state_load,
             commands::session_state_save,
             commands::session_state_backup,

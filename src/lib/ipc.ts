@@ -76,6 +76,26 @@ export async function whichProgram(program: string): Promise<string | null> {
   return (await invoke<string | null>("which_program", { program })) ?? null;
 }
 
+export interface HeadlessResult {
+  ok: boolean;
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timed_out: boolean;
+}
+
+/** Run an allowlisted CLI (claude) once with piped stdio: `stdin` carries the payload,
+ *  stdout comes back when the process exits. Plain pipes, not a PTY, so the CLI stays
+ *  in clean non-interactive mode. */
+export async function runHeadless(
+  program: string,
+  args: string[],
+  stdin: string,
+  timeoutMs?: number,
+): Promise<HeadlessResult> {
+  return await invoke<HeadlessResult>("run_headless", { program, args, stdin, timeoutMs });
+}
+
 export interface ShellCheckResult {
   ok: boolean;
   /** Short reason when not ok (trimmed program output). */

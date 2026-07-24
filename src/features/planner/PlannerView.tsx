@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ClipboardCheck, FileDown, Play, Send, Workflow } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, FileDown, Play, Send, Sparkles, Workflow } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "../../styles/planner.css";
 import { clipboardWriteText } from "../../lib/ipc";
@@ -9,7 +9,9 @@ import { usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
 import { useWorkspaces } from "../../store/workspaces";
 import { PlanCanvas } from "./PlanCanvas";
+import { ReviewPanel, type ReviewState } from "./ReviewPanel";
 import { SendToClaudeModal } from "./SendToClaudeModal";
+import { runPlanReview } from "./review";
 import { planToMarkdown } from "./serializeMarkdown";
 
 /** Full-workspace planner mode: toolbar + palette/canvas/inspector + send modal.
@@ -25,6 +27,8 @@ export function PlannerView() {
   const setPlanSend = useUI((s) => s.setPlanSend);
   const [copied, setCopied] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [review, setReview] = useState<ReviewState>({ status: "idle" });
 
   // Create the plan doc on first open. The workspace name only seeds the plan name.
   const wsName = ws?.name ?? "Plan";
@@ -54,6 +58,19 @@ export function PlannerView() {
     }
   };
 
+  // One review in flight at a time; the answer replaces the panel content in place.
+  const startReview = async () => {
+    const current = usePlans.getState().plans[wsId];
+    if (!current || review.status === "running") return;
+    setReview({ status: "running" });
+    const outcome = await runPlanReview(planToMarkdown(current, { cwd }));
+    setReview(
+      "review" in outcome
+        ? { status: "done", data: outcome.review }
+        : { status: "error", error: outcome.error, raw: outcome.raw },
+    );
+  };
+
   return (
     <div className="planner">
       <header className="planner-toolbar">
@@ -72,10 +89,24 @@ export function PlannerView() {
         <button
           className="btn-ghost"
           disabled={doc.nodes.length === 0}
-          onClick={() => setPreviewOpen((p) => !p)}
+          onClick={() => {
+            setReviewOpen(false);
+            setPreviewOpen((p) => !p);
+          }}
         >
           <Play size={14} />
           {t.previewRun}
+        </button>
+        <button
+          className="btn-ghost"
+          disabled={doc.nodes.length === 0}
+          onClick={() => {
+            setPreviewOpen(false);
+            setReviewOpen((r) => !r);
+          }}
+        >
+          <Sparkles size={14} />
+          {t.reviewBtn}
         </button>
         <button className="btn-ghost" onClick={() => void exportMarkdown()}>
           {copied ? <ClipboardCheck size={14} /> : <FileDown size={14} />}
@@ -99,6 +130,15 @@ export function PlannerView() {
         wsId={wsId}
         previewOpen={previewOpen}
         onClosePreview={() => setPreviewOpen(false)}
+        sidePanel={
+          reviewOpen ? (
+            <ReviewPanel
+              state={review}
+              onRun={() => void startReview()}
+              onClose={() => setReviewOpen(false)}
+            />
+          ) : undefined
+        }
       />
       {sendOpen && <SendToClaudeModal wsId={wsId} cwd={cwd} onClose={() => setPlanSend(false)} />}
     </div>
