@@ -1,20 +1,40 @@
-import { useEffect, useState } from "react";
-import { ArrowLeft, ClipboardCheck, FileDown, Play, Send, Sparkles, Workflow } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Bot,
+  ClipboardCheck,
+  FileDown,
+  LayoutGrid,
+  Play,
+  Send,
+  Sparkles,
+  Workflow,
+} from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "../../styles/planner.css";
-import { clipboardWriteText, planFileSave } from "../../lib/ipc";
+import { clipboardWriteText, planDraftConsume, planDraftRead, planFileSave } from "../../lib/ipc";
 import { useStrings } from "../../lib/i18n";
 import { useSettings } from "../../store/settings";
-import { usePlans } from "../../store/plans";
+import { sanitizePlanDoc, usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
 import { useWorkspaces } from "../../store/workspaces";
 import { PlanCanvas } from "./PlanCanvas";
 import { ReviewPanel, type ImproveState, type ReviewState } from "./ReviewPanel";
 import { SendToAiModal } from "./SendToAiModal";
 import { runPlanImprove } from "./improve";
+import { layoutPlan, needsLayout } from "./layout";
 import { runPlanReview, type ReviewError } from "./review";
 import { runPlanSimulation, type PlanSimulation } from "./simulate";
 import { planToMarkdown } from "./serializeMarkdown";
+
+/** How often the Blueprint checks the project folder for an AI-written draft. */
+const DRAFT_POLL_MS = 5000;
+
+type DraftState =
+  | { status: "none" }
+  | { status: "found"; text: string }
+  | { status: "invalid" }
+  | { status: "applied" };
 
 /** Full-workspace planner mode: toolbar + palette/canvas/inspector + send modal.
  *  One plan per workspace; the canvas remounts per workspace via key={wsId}. */
@@ -76,7 +96,93 @@ export function PlannerView() {
     return () => clearTimeout(timer);
   }, [cwd, wsId, updatedAt]);
 
+  // The reverse channel: an AI CLI writes <cwd>/.warsha/plan.draft.json, the Blueprint
+  // notices (on open + every few seconds) and offers to load it. A dismissed draft is
+  // remembered by content so the poll does not re-nag about the same text.
+  const [draft, setDraft] = useState<DraftState>({ status: "none" });
+  const dismissedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!cwd) return;
+    let alive = true;
+    const check = () => {
+      planDraftRead(cwd)
+        .then((text) => {
+          if (!alive || text === null || text === dismissedRef.current) return;
+          setDraft((prev) => {
+            // Never clobber the applied banner (Undo): consume may be slow, so the
+            // file can outlive the load by one poll tick.
+            if (prev.status === "applied") return prev;
+            return prev.status === "found" && prev.text === text
+              ? prev
+              : { status: "found", text };
+          });
+        })
+        .catch((e) => console.warn("plan draft poll failed", e));
+    };
+    check();
+    const timer = setInterval(check, DRAFT_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [cwd, wsId]);
+
   if (!doc) return null;
+
+  /** Parse -> sanitize -> auto-layout (drafts rarely carry positions) -> apply with a
+   *  one-level backup -> consume the file. Anything unparsable flips the banner to an
+   *  actionable error instead of silently dropping the AI's work. */
+  const loadDraft = () => {
+    if (draft.status !== "found") return;
+    let candidate: unknown;
+    try {
+      candidate = JSON.parse(draft.text);
+    } catch {
+      setDraft({ status: "invalid" });
+      return;
+    }
+    if (candidate && typeof candidate === "object") {
+      const c = candidate as Record<string, unknown>;
+      // The AI does not know our internal ids; keep the doc's identity and name.
+      if (typeof c.id !== "string" || !c.id) c.id = doc.id;
+      if (typeof c.name !== "string" || !c.name) c.name = doc.name;
+    }
+    const clean = sanitizePlanDoc(candidate);
+    if (!clean || clean.nodes.length === 0) {
+      setDraft({ status: "invalid" });
+      return;
+    }
+    if (needsLayout(clean.nodes)) {
+      clean.nodes = layoutPlan(clean.nodes, clean.edges);
+    }
+    clean.viewport = doc.viewport;
+    usePlans.getState().applyDoc(wsId, clean);
+    setCanvasEpoch((e) => e + 1);
+    setDraft({ status: "applied" });
+    if (cwd) {
+      planDraftConsume(cwd).catch((e) => console.warn("plan draft consume failed", e));
+    }
+  };
+
+  const dismissDraft = () => {
+    if (draft.status === "found") dismissedRef.current = draft.text;
+    setDraft({ status: "none" });
+  };
+
+  const undoDraft = () => {
+    if (usePlans.getState().revertDoc(wsId)) {
+      setCanvasEpoch((e) => e + 1);
+    }
+    setDraft({ status: "none" });
+  };
+
+  /** One-click clean layout for a messy canvas (same engine as draft import). */
+  const tidyLayout = () => {
+    const current = usePlans.getState().plans[wsId];
+    if (!current || current.nodes.length < 2) return;
+    usePlans.getState().setGraph(wsId, layoutPlan(current.nodes, current.edges), current.edges);
+    setCanvasEpoch((e) => e + 1);
+  };
 
   const exportMarkdown = async () => {
     const current = usePlans.getState().plans[wsId];
@@ -165,6 +271,10 @@ export function PlannerView() {
         />
         <span className="planner-count">{t.planNodeCount(doc.nodes.length)}</span>
         <span className="spacer" />
+        <button className="btn-ghost" disabled={doc.nodes.length < 2} onClick={tidyLayout}>
+          <LayoutGrid size={14} />
+          {t.tidyLayout}
+        </button>
         <button
           className="btn-ghost"
           disabled={doc.nodes.length === 0}
@@ -204,6 +314,41 @@ export function PlannerView() {
           {t.closePlanner}
         </button>
       </header>
+      {draft.status !== "none" && (
+        <div className="plan-draft-bar" role="status">
+          <Bot size={14} />
+          {draft.status === "found" && (
+            <>
+              <span>{t.draftFound}</span>
+              <button className="btn" onClick={loadDraft}>
+                {t.draftLoad}
+              </button>
+              <button className="btn-ghost" onClick={dismissDraft}>
+                {t.draftDismiss}
+              </button>
+            </>
+          )}
+          {draft.status === "invalid" && (
+            <>
+              <span className="plan-draft-error">{t.draftInvalid}</span>
+              <button className="btn-ghost" onClick={dismissDraft}>
+                {t.draftDismiss}
+              </button>
+            </>
+          )}
+          {draft.status === "applied" && (
+            <>
+              <span>{t.draftApplied}</span>
+              <button className="btn-ghost" onClick={undoDraft}>
+                {t.draftUndo}
+              </button>
+              <button className="btn-ghost" onClick={() => setDraft({ status: "none" })}>
+                {t.close}
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <PlanCanvas
         key={`${wsId}:${canvasEpoch}`}
         wsId={wsId}
@@ -228,7 +373,14 @@ export function PlannerView() {
           ) : undefined
         }
       />
-      {sendOpen && <SendToAiModal wsId={wsId} cwd={cwd} onClose={() => setPlanSend(false)} />}
+      {sendOpen && (
+        <SendToAiModal
+          wsId={wsId}
+          cwd={cwd}
+          review={review.status === "done" ? review.data : undefined}
+          onClose={() => setPlanSend(false)}
+        />
+      )}
     </div>
   );
 }

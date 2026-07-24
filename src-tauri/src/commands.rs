@@ -104,6 +104,47 @@ pub fn plan_file_save(dir: String, markdown: String) -> Result<String, String> {
     plan_file_save_at(std::path::Path::new(&dir), &markdown)
 }
 
+/// The AI-to-canvas channel: an AI CLI writes a whole-plan JSON here, the Blueprint
+/// polls for it and the user loads it with one click. Consumed (renamed) after load
+/// so the same draft never re-triggers the banner.
+const PLAN_DRAFT: &str = "plan.draft.json";
+const PLAN_DRAFT_APPLIED: &str = "plan.draft.applied.json";
+
+/// Contents of `<dir>/.warsha/plan.draft.json`, or None when there is no draft.
+/// A missing project folder is also None - the poller must never error-spam.
+#[tauri::command(async)]
+pub fn plan_draft_read(dir: String) -> Result<Option<String>, String> {
+    let path = std::path::Path::new(&dir).join(PLAN_DIR).join(PLAN_DRAFT);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let meta = std::fs::metadata(&path).map_err(|e| format!("read draft failed: {e}"))?;
+    if meta.len() as usize > MAX_PLAN_MD_BYTES {
+        return Err("draft too large".to_string());
+    }
+    std::fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|e| format!("read draft failed: {e}"))
+}
+
+/// Mark the draft as applied: rename it to plan.draft.applied.json (kept as a trace
+/// for the AI, replaced on the next load). Idempotent when the draft is already gone.
+#[tauri::command(async)]
+pub fn plan_draft_consume(dir: String) -> Result<(), String> {
+    let folder = std::path::Path::new(&dir).join(PLAN_DIR);
+    let draft = folder.join(PLAN_DRAFT);
+    if !draft.is_file() {
+        return Ok(());
+    }
+    let applied = folder.join(PLAN_DRAFT_APPLIED);
+    // Windows rename fails when the target exists; the old trace is disposable.
+    let _ = std::fs::remove_file(&applied);
+    std::fs::rename(&draft, &applied).map_err(|e| {
+        tracing::warn!(error = %e, "consume plan draft failed");
+        format!("consume draft failed: {e}")
+    })
+}
+
 fn plan_file_save_at(base: &std::path::Path, markdown: &str) -> Result<String, String> {
     if markdown.len() > MAX_PLAN_MD_BYTES {
         tracing::warn!(bytes = markdown.len(), "plan markdown over limit, save rejected");
@@ -161,6 +202,25 @@ mod tests {
         let body = std::fs::read_to_string(&p1).expect("read back");
         assert_eq!(body, "# Plan v2\n");
         assert!(!dir.join(PLAN_DIR).join(format!("{PLAN_FILE}.tmp")).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn plan_draft_roundtrip_reads_then_consumes() {
+        let dir = test_dir("draft");
+        let folder = dir.join(PLAN_DIR);
+        std::fs::create_dir_all(&folder).expect("mkdir");
+        assert_eq!(plan_draft_read(dir.to_string_lossy().into_owned()).expect("read"), None);
+        std::fs::write(folder.join(PLAN_DRAFT), "{\"nodes\":[]}").expect("write draft");
+        assert_eq!(
+            plan_draft_read(dir.to_string_lossy().into_owned()).expect("read"),
+            Some("{\"nodes\":[]}".to_string())
+        );
+        plan_draft_consume(dir.to_string_lossy().into_owned()).expect("consume");
+        assert_eq!(plan_draft_read(dir.to_string_lossy().into_owned()).expect("read"), None);
+        assert!(folder.join(PLAN_DRAFT_APPLIED).is_file());
+        // Idempotent when nothing is left to consume.
+        plan_draft_consume(dir.to_string_lossy().into_owned()).expect("consume again");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

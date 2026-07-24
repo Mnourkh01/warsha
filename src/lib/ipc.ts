@@ -103,6 +103,17 @@ export async function planFileSave(dir: string, markdown: string): Promise<strin
   return await invoke<string>("plan_file_save", { dir, markdown });
 }
 
+/** Contents of `<dir>/.warsha/plan.draft.json` (a whole-plan JSON written by an AI
+ *  CLI), or null when no draft is waiting. Safe to poll - a missing folder is null. */
+export async function planDraftRead(dir: string): Promise<string | null> {
+  return (await invoke<string | null>("plan_draft_read", { dir })) ?? null;
+}
+
+/** Mark the draft as loaded (renames it to plan.draft.applied.json). */
+export async function planDraftConsume(dir: string): Promise<void> {
+  await invoke("plan_draft_consume", { dir });
+}
+
 export interface ShellCheckResult {
   ok: boolean;
   /** Short reason when not ok (trimmed program output). */

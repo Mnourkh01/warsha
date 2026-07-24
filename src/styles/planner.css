@@ -61,6 +61,36 @@
   cursor: default;
 }
 
+/* ---- AI draft bar (an AI CLI wrote .warsha/plan.draft.json) ---- */
+.plan-draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text);
+  flex: none;
+}
+.plan-draft-bar > svg {
+  flex: none;
+  color: var(--accent);
+}
+.plan-draft-bar > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-draft-bar .btn,
+.plan-draft-bar .btn-ghost {
+  padding-block: 3px;
+}
+.plan-draft-error {
+  color: var(--danger);
+}
+
 /* ---- body: palette | canvas | inspector ---- */
 .planner-body {
   flex: 1;
@@ -876,6 +906,31 @@
 .plan-send-target button {
   flex: 1 1 auto;
   min-width: 0;
+}
+/* Review suggestions the user picks for Suggestions-only mode. */
+.plan-send-suggests {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+.plan-send-suggests label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  cursor: pointer;
+}
+.plan-send-suggests input {
+  margin-top: 2px;
+  flex: none;
+  accent-color: var(--accent);
 }
 .plan-send-folder {
   font-size: 12.5px;

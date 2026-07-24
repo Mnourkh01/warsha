@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Send, X } from "lucide-react";
 import { DialogTrap } from "../../lib/dialog-trap";
 import { clipboardWriteText, whichProgram } from "../../lib/ipc";
@@ -7,20 +7,28 @@ import { useStrings } from "../../lib/i18n";
 import { MAX_PER_WS, useWorkspaces } from "../../store/workspaces";
 import { usePlans } from "../../store/plans";
 import { useUI } from "../../store/ui";
-import { buildPlanPrompt } from "./prompt";
+import { buildContextPrompt, buildPlanPrompt } from "./prompt";
+import type { PlanReview } from "./review";
 import { planToMarkdown } from "./serializeMarkdown";
 import { sendPlanToAi, type SendError } from "./sendToAi";
 
+type SendMode = "full" | "context";
+
 /** Preview-and-confirm step before the handoff: pick which AI CLI receives the plan
- *  (Claude Code, Gemini CLI, or Codex), edit the prompt, then send. Errors (CLI
- *  missing, workspace full) surface here instead of failing silently. */
+ *  (Claude Code, Gemini CLI, or Codex) and what to send - the full plan for an AI
+ *  that has not seen it, or a short context prompt with the accepted review
+ *  suggestions for an AI the plan was built with. Errors (CLI missing, workspace
+ *  full) surface here instead of failing silently. */
 export function SendToAiModal({
   wsId,
   cwd,
+  review,
   onClose,
 }: {
   wsId: string;
   cwd?: string;
+  /** Last finished AI review, so Suggestions mode can offer its improvements. */
+  review?: PlanReview;
   onClose: () => void;
 }) {
   const t = useStrings();
@@ -32,14 +40,40 @@ export function SendToAiModal({
   const [ai, setAi] = useState<AiType>(AI_TYPES[0]);
   // Absent = probe still running; a missing CLI disables Send and shows its install line.
   const [avail, setAvail] = useState<Record<string, boolean>>({});
-  const [prompt, setPrompt] = useState(() => {
+  const [mode, setMode] = useState<SendMode>("full");
+  const suggestions = useMemo(() => review?.improvements ?? [], [review]);
+  const [picked, setPicked] = useState<boolean[]>(() => suggestions.map(() => true));
+  // A review can finish WHILE the modal is open (it runs in the panel behind); resync
+  // the picks or the indices would point at the wrong suggestions.
+  useEffect(() => {
+    setPicked(suggestions.map(() => true));
+  }, [suggestions]);
+  const planName = useMemo(() => {
+    const doc = usePlans.getState().plans[wsId];
+    return doc?.name.trim() || "Plan";
+  }, [wsId]);
+  const fullPrompt = useMemo(() => {
     const doc = usePlans.getState().plans[wsId];
     if (!doc) return "";
-    return buildPlanPrompt(planToMarkdown(doc, { cwd }), {
-      cwd,
-      planName: doc.name.trim() || "Plan",
-    });
-  });
+    return buildPlanPrompt(planToMarkdown(doc, { cwd }), { cwd, planName });
+  }, [wsId, cwd, planName]);
+  const [prompt, setPrompt] = useState(fullPrompt);
+  // Switching mode or toggling a suggestion regenerates the prompt (hand edits in
+  // that mode are replaced - the textarea is a preview, the pickers are the source).
+  useEffect(() => {
+    if (mode === "full") {
+      setPrompt(fullPrompt);
+    } else if (cwd) {
+      setPrompt(
+        buildContextPrompt({
+          cwd,
+          planName,
+          suggestions: suggestions.filter((_, i) => picked[i]),
+        }),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, picked, fullPrompt, cwd, planName, suggestions]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<SendError | null>(null);
@@ -140,6 +174,56 @@ export function SendToAiModal({
               ))}
             </div>
           </div>
+          <div className="field">
+            <span className="field-label">{t.sendPlanModeLabel}</span>
+            <div className="seg plan-send-target">
+              <button
+                className={mode === "full" ? "on" : ""}
+                disabled={busy}
+                onClick={() => setMode("full")}
+              >
+                {t.sendModeFull}
+              </button>
+              <button
+                className={mode === "context" ? "on" : ""}
+                disabled={busy || !cwd}
+                title={!cwd ? t.sendNeedsFolder : undefined}
+                onClick={() => setMode("context")}
+              >
+                {t.sendModeContext}
+              </button>
+            </div>
+            {!cwd && <span className="field-hint">{t.sendNeedsFolder}</span>}
+          </div>
+          {mode === "context" &&
+            (suggestions.length > 0 ? (
+              <div className="field">
+                <span className="field-label">{t.sendPickSuggestions}</span>
+                <ul className="plan-send-suggests">
+                  {suggestions.map((s, i) => (
+                    <li key={i}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={picked[i] ?? false}
+                          disabled={busy}
+                          onChange={(e) =>
+                            setPicked((prev) => {
+                              const next = [...prev];
+                              next[i] = e.target.checked;
+                              return next;
+                            })
+                          }
+                        />
+                        <span>{s}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="field-hint">{t.sendNoSuggestions}</div>
+            ))}
           <div className="plan-send-folder">{cwd ? t.sendPlanFolder(cwd) : t.sendPlanNoFolder}</div>
           <label className="field">
             <span className="field-label">{t.sendPlanPromptLabel}</span>

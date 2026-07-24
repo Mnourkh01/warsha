@@ -39,6 +39,8 @@ pub fn run() {
             commands::session_state_save,
             commands::session_state_backup,
             commands::plan_file_save,
+            commands::plan_draft_read,
+            commands::plan_draft_consume,
             commands::update_check,
         ])
         .build(tauri::generate_context!())
